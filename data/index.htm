@@ -1,0 +1,553 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>WebSockets test</title>
+        <link rel="stylesheet" href="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/jquery.jqplot.min.css" />
+    	<style>
+			/* Basic styles */
+			.ui-body {
+			    text-align: left;
+			    border-color: #ddd;
+			}
+			p {
+			    color: #777;
+			    line-height: 140%
+			}
+			/* Stack all blocks to start */
+			.ui-block-a,
+			.ui-block-b,
+			.ui-block-c {
+			    width: 100%;
+			    float: none;
+			}
+			/* Collapsing borders */
+			.ui-body {
+			    border-top-width: 0;
+			}
+			.smart-plug-sw .ui-slider-switch {
+				width: 9em;
+				height: 2em;
+			}
+			.override-sw .ui-slider-switch {
+				width: 9em;
+				height: 2em;
+			}
+			/* 1st breakpoint - Float B and C, leave A full width on top */
+			@media all and (min-width: 42em) {
+			    {
+			        overflow: hidden; /* Use this or a "clearfix" to give the container height */
+			    }
+			    .ui-body {
+			       min-height: 14em;
+			    }
+			    .ui-block-b,
+			    .ui-block-c {
+			      float: left;
+			      width: 49.95%;
+			    }
+			    .ui-block-b p,
+			    .ui-block-c p {
+			      font-size: .8em;
+			    }
+			    .ui-body {
+			        border-top-width: 1px;
+			    }
+			    .ui-body {
+			        border-bottom-width: 0;
+			    }
+			    .ui-body {
+			        border-left-width: 0;
+			    }
+			}
+			/* 2nd breakpoint - Float all, 50/25/25 */
+			@media all and (min-width: 55em) {
+			    .ui-body {
+			       min-height: 18em;
+			    }
+			    .ui-block-a,
+			    .ui-block-c {
+			      float: left;
+			      width: 49.95%;
+			    }
+			    .ui-block-b,
+			    .ui-block-c {
+			      float: left;
+			      width: 24.925%;
+			    }
+			    .ui-body {
+			        border-bottom-width: 1px;
+			    }
+			    .ui-body {
+			        border-left-width: 0;
+			    }
+			}
+			/* 3rd breakpoint - Bump up font size at very wide screens */
+			@media all and (min-width: 75em) {
+			    .ui-body {
+			      font-size: 125%;
+			    }
+			    .ui-block-a,
+			    .ui-block-c {
+			      float: left;
+			      width: 49.95%;
+			    }
+			    .ui-block-b,
+			    .ui-block-c {
+			      float: left;
+			      width: 24.925%;
+			    }
+			}
+		</style>
+		<script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+		<script>
+			$(document).bind('mobileinit',function(){
+				$.mobile.pushStateEnabled = false;
+				$.mobile.loader.prototype.options.text = "loading";
+				$.mobile.loader.prototype.options.textVisible = true;
+				$.mobile.loader.prototype.options.theme = "a";
+				$.mobile.loader.prototype.options.textonly = false;
+				$.mobile.loader.prototype.options.html = "<span class='ui-bar ui-overlay-c ui-corner-all'><img src='aloader.gif' /><h2>loading</h2></span>";
+			});
+		</script>
+        <script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/excanvas.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/jquery.jqplot.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/plugins/jqplot.mobile.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/plugins/jqplot.dateAxisRenderer.min.js"></script>
+		<script type="text/javascript">
+			/* store empty array or array of original data to plot on page load */
+
+			var webSockets = {};
+			var nodes = {};
+			var connected = {};
+			var things = {};
+			var recipes = {};
+			var watts = {};
+			var currentNode = 0;
+			var currentWSH = '';
+
+			function isEmpty(map) {
+			   for(var key in map) {
+				  if (map.hasOwnProperty(key)) {
+					 return false;
+				  }
+			   }
+			   return true;
+			}
+			// Listen for any attempts to call changePage().
+			$(document).bind( "pagebeforechange", function( e, data ) {
+				if ( typeof data.toPage === "string" ) {
+					var u = $.mobile.path.parseUrl( data.toPage ),
+						re = /^#thing_item/;
+					if ( u.hash.search(re) !== -1 ) {
+						showThing( u, data.options );
+						e.preventDefault();
+					}
+					u = $.mobile.path.parseUrl( data.toPage ),
+						re = /^#nodes/;
+					if ( u.hash.search(re) !== -1 ) {
+						showNodes( u, data.options );
+						e.preventDefault();
+					}
+					u = $.mobile.path.parseUrl( data.toPage ),
+						re = /^#index/;
+					if ( u.hash.search(re) !== -1 ) {
+						showIndex( u, data.options );
+						e.preventDefault();
+					}
+				}
+			});
+
+			$(document).ready(function() {
+        startWebsocket(window.location.hostname);
+				//startWebsocket("10.0.0.102");
+				//startWebsocket("smartplugesp.local");
+				//renderGraph();
+            });
+
+			function debug(str) {
+				$("#debug").html("<p>"+str+"<p>");
+			}
+
+			function startWebsocket(websockethost){
+				try {
+					if(!(websockethost in webSockets)){
+						//currentWSH = websockethost;
+						window.console.log("Setting up socket");
+						ws = new WebSocket("ws://" + websockethost + ":81");
+						webSockets[websockethost] = ws;
+						connected[websockethost] = false;
+						ws.onmessage = function(evt) {
+							window.console.log(evt.data);
+							var obj = jQuery.parseJSON( evt.data );
+							if(obj.command == "response_things"){
+								$.each(obj.things, function(idx, thing){
+									window.console.log(thing);
+									if(!(obj.nodeId+"_"+thing['id'] in things)){
+										things[obj.nodeId+"_"+thing['id']] = thing;
+										currentNode = obj.nodeId;
+									}
+                  if($.mobile.activePage.attr('id') == "index"){
+  									switch(thing['id']){
+  										case 1: {//PLUG
+  													window.console.log(thing['name'] + ": " + thing['value']);
+  													if(thing['override']){
+  														$("#flip-ovrd-sw").val('on').slider('refresh');
+  														$("#smart-plug-sw").show();
+  													} else {
+  														$("#flip-ovrd-sw").val('off').slider('refresh');
+  														$("#smart-plug-sw").hide();
+  													}
+  													if(thing['value'] == 1){
+  														$("#flip-plug-sw").val('on').slider('refresh');
+  													} else {
+  														$("#flip-plug-sw").val('off').slider('refresh');
+  													}
+  													$("#plug").text(thing['name'] + ": " + thing['value']);
+  												}
+  												break;
+  										case 2: {//WATTS
+  													window.console.log(thing['name'] + ": " + thing['value']);
+                            doUpdate(parseFloat(thing['value']));
+          									$("#watts").text(thing['name'] + ": " + thing['value']);
+          									var d = new Date("January 1, 2000 02:00:00");
+          									d.setUTCSeconds(d.getUTCSeconds() + thing['lastUpdate']);
+          									$("#lastupdate-index").html(d.toLocaleString());
+  												}
+  												break;
+  										case 3: {//DAILY-WATTS
+  													window.console.log(thing['name'] + ": " + thing['value']);
+  													$("#daily-kwh").text(thing['name'] + ": " + thing['value']);
+  												}
+  												break;
+  									}
+                  }
+								});
+							} else if(obj.command == "response_nodes"){
+								$.each(obj.nodes, function(idx, item){
+									window.console.log(item);
+									if(!(item['id'] in nodes) && item['id']!=0){
+										nodes[item['id']] = item;
+										window.console.log("added to nodes");
+                    var content = "<li><a href=\"http://" + item['name'] + ".local" + "\">" + item['name'] + "</a></li>";
+                    $("#nodeLinkList").append( content ).trigger("create");
+                    sendCommand(websockethost, "request_things");
+										if(!(item['name'] + '.local' in webSockets)) setTimeout(function(){startWebsocket(item['name'] + '.local')}, 200);
+									}
+								});
+							} else if(obj.command == "response_recipes"){
+								$.each(obj.recipes, function(idx, item){
+									window.console.log(item);
+								});
+                if(!(obj.nodeId in recipes)){
+                  recipes[obj.nodeId] = obj.recipes;
+                }
+							} else if(obj.command == "thing_update"){
+								if(obj.thingId == 2) {
+									doUpdate(parseFloat(obj.value));
+									$("#watts").text(obj.thingName + ": " + obj.value);
+									var d = new Date("January 1, 2000 02:00:00");
+									d.setUTCSeconds(d.getUTCSeconds() + obj.lastUpdate);
+									$("#lastupdate-index").html(d.toLocaleString());
+								}
+								if(obj.thingId == 3) {
+									$("#daily-kwh").text(obj.thingName + ": " + obj.value);
+								}
+							}
+						};
+						ws.onerror = function(evt) {
+							window.console.log(evt.data);
+							$("#msg").html("<p> ERROR: "+evt.data+"</br>Retrying! <p>");
+						};
+						ws.onclose = function() {
+							window.console.log("onclose called... reopening");
+							debug("socket closed... reopening");
+							connected[websockethost] = false;
+							setTimeout(function(){startWebsocket(websockethost)}, 2000);
+						};
+						ws.onopen = function() {
+							window.console.log("onopen called");
+							debug("connected...");
+							connected[websockethost] = true;
+							sendCommand(websockethost, "request_nodes");
+              currentWSH = websockethost;
+						};
+					} else {
+						delete webSockets[websockethost];
+						setTimeout(function(){startWebsocket(websockethost)}, 200);
+					}
+                } catch(exception) {
+                    window.console.log('<p>Error'+exception);
+                }
+			}
+
+			function sendCommand(websockethost, command) {
+        if(connected[websockethost]) {
+					window.console.log("sending " + command);
+					var sendObj = {
+						'command' : command
+					};
+					webSockets[websockethost].send(JSON.stringify(sendObj));
+				} else {
+					setTimeout(function(){sendCommand(websockethost, "request_things")}, 200);
+				}
+            };
+
+			function sendObject(websockethost, sendObj) {
+          if(connected[websockethost]) {
+  					var jsonStr = JSON.stringify(sendObj);
+  					window.console.log("sending "+jsonStr+" to " + websockethost);
+  					webSockets[websockethost].send(jsonStr);
+  				} else {
+  					setTimeout(function(){sendCommand(websockethost, "request_things")}, 200);
+  				}
+      };
+
+			function showThing( urlObj, options ){
+				var nodesKey = urlObj.hash.replace( /.*node_thing=/, "" );
+				window.console.log(nodesKey);
+				var nodeId = nodesKey.split('_',2)[0];
+				window.console.log(nodeId);
+				var pageSelector = urlObj.hash.replace( /\?.*$/, "" );
+				window.console.log(pageSelector);
+				if(!recipes.hasOwnProperty(nodeId)) sendCommand(nodes[nodeId].nodeName + ".local", "request_recipes");
+				showThingPage( nodesKey, pageSelector, urlObj, options );
+			}
+
+			function showNodes( urlObj, options ){
+				var pageSelector = urlObj.hash.replace( /\?.*$/, "" );
+				window.console.log(pageSelector);
+				showPage( pageSelector, urlObj, options );
+			}
+
+			function showIndex( urlObj, options ){
+				var pageSelector = urlObj.hash.replace( /\?.*$/, "" );
+				window.console.log(pageSelector);
+        doBlankUpdate();
+				showPage( pageSelector, urlObj, options );
+			}
+
+			function showThingPage( nodesKey, pageSelector, urlObj, options ){
+				if(!recipes.hasOwnProperty(nodesKey.split('_',1)[0])) {
+					setTimeout(function(){showThingPage( nodesKey, pageSelector, urlObj, options )}, 1000);
+					return;
+				} else {
+					var $page = $( pageSelector ),
+						nodeId = nodesKey.split('_',2)[0],
+						thingId = nodesKey.split('_',2)[1],
+						$header = $page.children( ":jqmData(role=header)" ),
+						$content = $page.children( ":jqmData(role=content)" ),
+						markup = "<p>" + things[nodesKey].name + " Recipes</p><ul data-role='listview' data-inset='true'>",
+						cRecipes = recipes[nodeId],
+						numRecipes = cRecipes.length;
+
+					for ( var i = 0; i < numRecipes; i++ ) {
+						if(cRecipes[i].localThingId == thingId) markup += "<li>" + cRecipes[i].name + "</li>";
+					}
+					markup += "</ul>";
+					$header.find( "h1" ).html( things[nodesKey].name );
+					$content.html( markup );
+					$page.page();
+					$content.find( ":jqmData(role=listview)" ).listview();
+					options.dataUrl = urlObj.href;
+					$.mobile.changePage( $page, options );
+				}
+			}
+
+			function showPage( pageSelector, urlObj, options ){
+				var $page = $( pageSelector );
+				options.dataUrl = urlObj.href;
+				$page.page();
+				$.mobile.changePage( $page, options );
+			}
+		</script>
+    </head>
+    <body id="nodeList">
+		<div data-role="page" id="index" class="ui-responsive-panel">
+      <div data-role="panel" data-display="overlay" data-position="left" data-position-fixed="false" id="nav-panel-index" data-theme="a">
+				<ul data-role="listview" data-theme="a" data-divider-theme="a" style="margin-top:-16px;" class="nav-search">
+					<li data-icon="delete" style="background-color:#111;">
+						<a href="#" data-rel="close">Close menu</a>
+					</li>
+          <li data-filtertext="wai-aria voiceover accessibility screen reader">
+						<a href="#index" >Main</a>
+					</li>
+					<li data-filtertext="wai-aria voiceover accessibility screen reader">
+						<a href="#nodes">Nodes</a>
+					</li>
+				</ul>
+			</div><!-- /panel -->
+			<div data-theme="a" data-role="header" data-position="fixed">
+				<h3>
+					Current Watts
+				</h3>
+				<a href="#nav-panel-index" data-icon="bars" data-iconpos="notext">Menu</a>
+			</div>
+			<div data-role="content">
+				<div id="chart1" style="height: 40%; width: 100%; position: relative;"></div>
+				</br>
+				<label id="watts">Watts</label>
+				<label id="daily-kwh">Daily Watts/hour</label>
+				<div class="ui-block-a">
+			        <div class="ui-body">
+			            <div id="override-sw" class="override-sw">
+							<select name="flip-ovrd-sw" id="flip-ovrd-sw" data-role="slider">
+								<option value="off">Override Off</option>
+								<option value="on">Override On</option>
+							</select>
+						</div>
+			        </div>
+			    </div>
+				<div class="ui-block-b">
+			        <div class="ui-body">
+			            <div id="smart-plug-sw" class="smart-plug-sw">
+							<select name="flip-plug-sw" id="flip-plug-sw" data-role="slider">
+								<option value="off">Plug Off</option>
+								<option value="on">Plug On</option>
+							</select>
+						</div>
+			        </div>
+			    </div>
+			</div>
+			<div data-role="footer" id="statusbar" data-position="fixed">
+				<h4>Last Update: <span id="lastupdate-index"></span></h4>
+			</div>
+		</div>
+		<div data-role="page" id="nodes" class="ui-responsive-panel">
+      <div data-role="panel" data-display="overlay" data-position="left" data-position-fixed="false" id="nav-panel-nodes" data-theme="a">
+				<ul data-role="listview" data-theme="a" data-divider-theme="a" style="margin-top:-16px;" class="nav-search">
+					<li data-icon="delete" style="background-color:#111;">
+						<a href="#" data-rel="close">Close menu</a>
+					</li>
+          <li data-filtertext="wai-aria voiceover accessibility screen reader">
+						<a href="#index" >Main</a>
+					</li>
+					<li data-filtertext="wai-aria voiceover accessibility screen reader">
+						<a href="#nodes">Nodes</a>
+					</li>
+				</ul>
+			</div><!-- /panel -->
+			<div data-theme="a" data-role="header" data-position="fixed">
+				<h3>
+					Nodes
+				</h3>
+				<a href="#nav-panel-nodes" data-icon="bars" data-iconpos="notext">Menu</a>
+			</div>
+			<ul data-role="listview" id="nodeLinkList">
+      </ul>
+      <div data-role="footer" id="statusbar" data-position="fixed">
+				<h4>Last Update: <span id="lastupdate-index"></span></h4>
+			</div>
+		</div>
+		<div data-role="page" id="thing_items" class="ui-responsive-panel">
+			<div data-theme="a" data-role="header" data-position="fixed">
+				<h3>
+					Settings
+				</h3>
+			</div>
+			<div data-role="content"></div>
+      <div data-role="footer" id="statusbar" data-position="fixed">
+				<h4>Last Update: <span id="lastupdate-index"></span></h4>
+			</div>
+		</div>
+    </body>
+<script>
+
+$("#flip-ovrd-sw").change(function () {
+	//window.console.log("here");
+	sVal = $(this).val();
+	if (sVal == 'on') {
+		$("#smart-plug-sw").show();
+	} else {
+		$("#smart-plug-sw").hide();
+	}
+	if (currentNode != 0) {
+		var oThing = things[currentNode + '_1'];
+		oThing.override = (sVal=='on')?true:false;
+		window.console.log(oThing);
+		things[currentNode + '_1'] = oThing;
+		var jObj = {
+			command : 'save_thing',
+			thing : oThing
+		}
+		window.console.log(currentWSH);
+		sendObject(currentWSH, jObj);
+	}
+});
+
+$("#flip-plug-sw").change(function () {
+	sVal = $(this).val();
+	if (currentNode != 0) {
+		var oThing = things[currentNode + '_1'];
+		oThing.value = (sVal=='on')?1:0;
+		window.console.log(oThing);
+		things[currentNode + '_1'] = oThing;
+		var jObj = {
+			command : 'save_thing',
+			thing : oThing
+		}
+		window.console.log(currentWSH);
+		sendObject(currentWSH, jObj);
+	}
+});
+
+var storedData = [];
+var n = 20;
+var x = (new Date()).getTime(); // current time
+/* initialize plot*/
+for(i=0; i<n; i++){
+  storedData.push([x - (n-1-i)*2000,0]);
+}
+var options = {
+  axes: {
+	 xaxis: {
+		numberTicks: 6,
+		renderer:$.jqplot.DateAxisRenderer,
+		tickOptions:{formatString:'%H:%M:%S'},
+		min : storedData[0][0],
+		max: storedData[storedData.length-1][0]
+	 },
+	 yaxis: {
+		min:0,
+		numberTicks: 6,
+		tickOptions:{formatString:'%.1f'}
+	 }
+  },
+  seriesDefaults: {
+	 rendererOptions: { smooth: true},
+	 showMarker:  false
+  }
+};
+
+var plot1 = $.jqplot ('chart1', [storedData],options);
+
+function doUpdate(value) {
+    var newVal = new Number(value)/1000; /* update storedData array*/
+	//storedData.push(newVal);
+	//renderGraph();
+	if(storedData.length > n-1){
+		 storedData.shift();
+	}
+	var x = (new Date()).getTime();
+	storedData.push([x,newVal]);
+	if (plot1) {
+		plot1.destroy();
+	}
+	plot1.series[0].data = storedData;
+	options.axes.xaxis.min = storedData[0][0];
+	options.axes.xaxis.max = storedData[storedData.length-1][0];
+	plot1 = $.jqplot ('chart1', [storedData],options);
+}
+
+function doBlankUpdate() {
+	if (plot1) {
+		plot1.destroy();
+	}
+	plot1.series[0].data = storedData;
+	options.axes.xaxis.min = storedData[0][0];
+	options.axes.xaxis.max = storedData[storedData.length-1][0];
+	plot1 = $.jqplot ('chart1', [storedData],options);
+}
+</script>
+</html>
