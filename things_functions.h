@@ -14,7 +14,9 @@ Measuring AC Current Using ACS712
 const int sensorIn = A0;
 const int switchOut = D2;
 
+int initNodes(Node (*ptrNodes)[NODES_LEN],unsigned long ntp_timer);
 void initThings(Thing (*ptrThings)[THINGS_LEN], unsigned long ntp_timer);
+void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer);
 void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN], long nodeId, unsigned long ntp_timer);
 int determineVQ(int PIN);
 

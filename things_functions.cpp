@@ -2,6 +2,8 @@
 #include "things_functions.h"
 #include "time_ntp.h"
 
+#define CHIP_ID system_get_chip_id()
+
 TM1637Display display(CLK, DIO);
 
 
@@ -24,11 +26,36 @@ unsigned int count;
 unsigned long prevMicros;
 long startMicros;
 float dwh = 0;
+char sNodes[NODE_JSON_SIZE*NODES_LEN];
 char sThings[THING_JSON_SIZE*THINGS_LEN];
+char sRecipes[RECIPE_JSON_SIZE*RECIPES_LEN];
 // ---------------------------------------
 
-void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
+int initNodes(Node (*ptrNodes)[NODES_LEN],unsigned long ntp_timer){
+  IPAddress localIP = WiFi.localIP();
+  sNodes[0] = 0;
+  int lastNodeIdx = 0;
   display.setBrightness(0x0f);
+  if(!loadFromFileNew("/nodes.json",sNodes,NODE_JSON_SIZE*NODES_LEN) || sNodes[0] == '\0') {
+    (*ptrNodes)[0].id = CHIP_ID;
+    (*ptrNodes)[0].name = "SmartPlugEsp";
+    sprintf((*ptrNodes)[0].ip,"%u.%u.%u.%u",localIP[0], localIP[1], localIP[2], localIP[3]);
+    saveNodesToFile(ptrNodes);
+    serializeNodes(ptrNodes, sNodes, NODE_JSON_SIZE*NODES_LEN);
+    lastNodeIdx = 1;
+    delay(100);
+  } else {
+    lastNodeIdx = deserializeNodes(ptrNodes,sNodes);
+    sprintf((*ptrNodes)[0].ip,"%u.%u.%u.%u",localIP[0], localIP[1], localIP[2], localIP[3]);
+    saveNodesToFile(ptrNodes);
+  }
+  DBG_OUTPUT_PORT.print("sNodes ");
+  DBG_OUTPUT_PORT.println(sNodes);
+  display.showNumberDec(localIP[3], false);
+  return lastNodeIdx;
+}
+
+void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
   pinMode(sensorIn, INPUT);
   pinMode(switchOut, OUTPUT);
   //digitalWrite(switchOut, HIGH);
@@ -36,9 +63,10 @@ void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
   startMicros = micros();
   currentAcc = 0;
   count = 0;
-  display.setBrightness(0x0f);
   prevMicros = micros() - sampleInterval ;
-  if(!loadFromFileNew("/things.json",sThings,THING_JSON_SIZE*THINGS_LEN)){
+  sThings[0] = 0;
+  delay(500);
+  if(!loadFromFileNew("/things.json",sThings,THING_JSON_SIZE*THINGS_LEN) || (sThings[0] == '\0')){
     (*ptrThings)[0].id = 1;
     (*ptrThings)[0].name = "Plug";
     (*ptrThings)[0].type = SWITCH;
@@ -46,19 +74,19 @@ void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
     (*ptrThings)[0].override = false;
     (*ptrThings)[0].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[1].id = 2;
-    (*ptrThings)[1].name = "Wats";
+    (*ptrThings)[1].name = "Current Wats";
     (*ptrThings)[1].type = GENERIC;
     (*ptrThings)[1].value = 0;
     (*ptrThings)[1].override = false;
     (*ptrThings)[1].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[2].id = 3;
-    (*ptrThings)[2].name = "Daily Wats/Hour";
+    (*ptrThings)[2].name = "Daily Wats per Hour";
     (*ptrThings)[2].type = GENERIC;
     (*ptrThings)[2].value = 1;
     (*ptrThings)[2].override = false;
     (*ptrThings)[2].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[3].id = 4;
-    (*ptrThings)[3].name = "Clock";
+    (*ptrThings)[3].name = "Time of day";
     (*ptrThings)[3].type = CLOCK;
     (*ptrThings)[3].value = seconds_since_midnight(millis()/1000+ntp_timer);
     (*ptrThings)[3].override = false;
@@ -73,9 +101,36 @@ void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
   delay(100);
 
   (*ptrThings)[1].value = 0;
-  (*ptrThings)[2].value = 1;
-  (*ptrThings)[3].value = millis()/1000+ntp_timer;
+  (*ptrThings)[2].value = 0;
+  (*ptrThings)[3].value = seconds_since_midnight(millis()/1000+ntp_timer);
   if(!(*ptrThings)[0].override) (*ptrThings)[0].value = ON;
+}
+
+void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
+  sRecipes[0] = 0;
+  if(!loadFromFileNew("/recipes.json",sRecipes,RECIPE_JSON_SIZE*RECIPES_LEN) || sRecipes[0] == '\0'){
+    (*ptrRecipes)[0].id = 1;
+    String name = "Max Watts/Hour";
+    name.toCharArray((*ptrRecipes)[0].name,50);
+    (*ptrRecipes)[0].localThingId = 1;
+    (*ptrRecipes)[0].localValue = 0;
+    (*ptrRecipes)[0].sourceNodeId = CHIP_ID;
+    (*ptrRecipes)[0].sourceThingId = 3;
+    (*ptrRecipes)[0].sourceValue = 0;
+    (*ptrRecipes)[0].relation = BIGGER_THAN;
+    (*ptrRecipes)[0].targetValue = 20;
+    saveRecipesToFile(ptrRecipes);
+    delay(100);
+    serializeRecipes(ptrRecipes, sRecipes, RECIPE_JSON_SIZE*RECIPES_LEN);
+    delay(100);
+  } else {
+    delay(100);
+    deserializeRecipes(ptrRecipes,sRecipes);
+  }
+
+  DBG_OUTPUT_PORT.print("sRecipes ");
+  DBG_OUTPUT_PORT.println(sRecipes);
+  //deserializeRecipes(&arrRecipes,sRecipes);
 }
 
 void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN], long nodeId, unsigned long ntp_timer){

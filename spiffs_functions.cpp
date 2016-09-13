@@ -3,21 +3,26 @@
 bool loadFromFileNew(const char* cFileName, char* json, size_t maxSize) {
   File spifsFile = SPIFFS.open(cFileName, "r");
   if (!spifsFile) {
-    DBG_OUTPUT_PORT.println("Failed to open "+String(cFileName)+" file");
+    DBG_OUTPUT_PORT.println("Failed to open "+String(cFileName)+" file for reading");
+    spifsFile.close();
+    delay(500);
     return false;
   }
   size_t size = spifsFile.size();
   if (size > maxSize) {
     DBG_OUTPUT_PORT.println(String(cFileName)+" file size is too large");
+    spifsFile.close();
+    delay(500);
     return false;
   }
   spifsFile.readBytes(json, size);
+  delay(500);
   return true;
 //  DBG_OUTPUT_PORT.print("Load fromfile ");
 //  DBG_OUTPUT_PORT.println(String(buf.get()));
 }
 
-volatile bool saveToFile(JsonArray& jArr, const char* cFileName) {
+bool saveToFile(JsonArray& jArr, const char* cFileName) {
   File spifsFile = SPIFFS.open(cFileName, "w");
   if (!spifsFile) {
     DBG_OUTPUT_PORT.println("Failed to open things file for writing");
@@ -36,23 +41,44 @@ bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]) {
     return false;
   }
 
-  char jNodes[NODE_JSON_SIZE*NODES_LEN];
-  serializeNodes(ptrNodes, jNodes, NODE_JSON_SIZE*NODES_LEN);
-  spifsFile.println(jNodes);
+  StaticJsonBuffer<NODE_JSON_SIZE*NODES_LEN> jsonBuffer;
+  JsonArray& root = jsonBuffer.createArray();
+  for( int idx = 0 ; idx < NODES_LEN ; idx++ ){
+    Node tmpNode = (*ptrNodes)[idx];
+    if(tmpNode.id != 0 ){
+      JsonObject& tmpJNode = root.createNestedObject();
+      tmpJNode["id"] = tmpNode.id;
+      tmpJNode["name"] = tmpNode.name;
+      tmpJNode["ip"] = String(tmpNode.ip);
+    }
+  }
+  root.printTo(spifsFile);
   spifsFile.close();
   return true;
 }
 
-volatile bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]) {
+bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]) {
   File spifsFile = SPIFFS.open("/things.json", "w");
   if (!spifsFile) {
     DBG_OUTPUT_PORT.println("Failed to open things file for writing");
     return false;
   }
 
-  char jThings[THING_JSON_SIZE*THINGS_LEN];
-  serializeThings(ptrThings, jThings, THING_JSON_SIZE*THINGS_LEN);
-  spifsFile.println(jThings);
+  StaticJsonBuffer<THING_JSON_SIZE*THINGS_LEN> jsonBuffer;
+  JsonArray& root = jsonBuffer.createArray();
+  for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
+    const Thing tmpThing = (*ptrThings)[idx];
+    if(tmpThing.id != 0){
+      JsonObject& tmpJThing = root.createNestedObject();
+      tmpJThing["id"] = tmpThing.id;
+      tmpJThing["name"] = tmpThing.name;
+      tmpJThing["type"] = tmpThing.type;
+      tmpJThing["value"] = String(tmpThing.value).toFloat();
+      tmpJThing["override"] = tmpThing.override;
+      tmpJThing["last_updated"] = tmpThing.last_updated;
+    }
+  }
+  root.printTo(spifsFile);
   spifsFile.close();
   return true;
 }
@@ -64,11 +90,46 @@ bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]) {
     return false;
   }
 
-  char jRecipes[RECIPE_JSON_SIZE*RECIPES_LEN];
-  serializeRecipes(ptrRecipes, jRecipes, RECIPE_JSON_SIZE*RECIPES_LEN);
-  spifsFile.println(jRecipes);
+  StaticJsonBuffer<RECIPE_JSON_SIZE*RECIPES_LEN> jsonBuffer;
+  JsonArray& root = jsonBuffer.createArray();
+  for( int idx = 0 ; idx < RECIPES_LEN ; idx++ ){
+    Recipe tmpRecipe = (*ptrRecipes)[idx];
+    if(tmpRecipe.id != 0){
+      JsonObject& tmpJRecipe = root.createNestedObject();
+      tmpJRecipe["id"] = tmpRecipe.id;
+      tmpJRecipe["name"] = String(tmpRecipe.name);
+      tmpJRecipe["sourceNodeId"] = tmpRecipe.sourceNodeId;
+      tmpJRecipe["sourceThingId"] = tmpRecipe.sourceThingId;
+      tmpJRecipe["sourceValue"] = tmpRecipe.sourceValue;
+      tmpJRecipe["relation"] = tmpRecipe.relation;
+      tmpJRecipe["localThingId"] = tmpRecipe.localThingId;
+      tmpJRecipe["targetValue"] = tmpRecipe.targetValue;
+      tmpJRecipe["localValue"] = tmpRecipe.localValue;
+      tmpJRecipe["last_updated"] = tmpRecipe.last_updated;
+    }
+  }
+  root.printTo(spifsFile);
   spifsFile.close();
+  root.printTo(DBG_OUTPUT_PORT);
   return true;
+}
+
+bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer){
+  //StaticJsonBuffer<RECIPE_JSON_SIZE> jsonBuffer;
+  //JsonObject &recipe = jsonBuffer.parseObject(json);
+  recipe.printTo(DBG_OUTPUT_PORT);
+  int index = recipe["id"].as<int>() - 1;
+  (*ptrRecipes)[index].id = recipe["id"].as<int>();
+  recipe["name"].as<String>().toCharArray((*ptrRecipes)[index].name,50);
+  (*ptrRecipes)[index].sourceNodeId = recipe["sourceNodeId"].as<long>();
+  (*ptrRecipes)[index].sourceThingId = recipe["sourceThingId"].as<int>();
+  (*ptrRecipes)[index].sourceValue = recipe["sourceValue"].as<float>();
+  (*ptrRecipes)[index].relation = recipe["relation"].as<int>();
+  (*ptrRecipes)[index].localThingId = recipe["localThingId"].as<int>();
+  (*ptrRecipes)[index].targetValue = recipe["targetValue"].as<float>();
+  (*ptrRecipes)[index].localValue = recipe["localValue"].as<float>();
+  (*ptrRecipes)[index].last_updated = millis()/1000+ntp_timer;
+  return saveRecipesToFile(ptrRecipes);
 }
 
 void serializeNodes(const Node (*ptrNodes)[NODES_LEN], char* json, size_t maxSize){
@@ -80,6 +141,7 @@ void serializeNodes(const Node (*ptrNodes)[NODES_LEN], char* json, size_t maxSiz
         JsonObject& tmpJNode = root.createNestedObject();
         tmpJNode["id"] = tmpNode.id;
         tmpJNode["name"] = tmpNode.name;
+        tmpJNode["ip"] = String(tmpNode.ip);
       }
     }
     root.printTo(json, maxSize);
@@ -111,7 +173,7 @@ void serializeRecipes(const Recipe (*ptrRecipes)[RECIPES_LEN], char* json, size_
       if(tmpRecipe.id != 0){
         JsonObject& tmpJRecipe = root.createNestedObject();
         tmpJRecipe["id"] = tmpRecipe.id;
-        tmpJRecipe["name"] = tmpRecipe.name;
+        tmpJRecipe["name"] = String(tmpRecipe.name);
         tmpJRecipe["sourceNodeId"] = tmpRecipe.sourceNodeId;
         tmpJRecipe["sourceThingId"] = tmpRecipe.sourceThingId;
         tmpJRecipe["sourceValue"] = tmpRecipe.sourceValue;
@@ -135,6 +197,7 @@ int deserializeNodes(Node (*ptrNodes)[NODES_LEN], char* json){
         if (jNode["id"].as<int>() != 0) {
           (*ptrNodes)[cuntr].id = jNode["id"];
           (*ptrNodes)[cuntr].name = jNode["name"];
+          strcpy((*ptrNodes)[cuntr].ip,jNode["ip"]);
           lastINDEX++;
           cuntr++;
         }
@@ -173,7 +236,7 @@ bool deserializeRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], char* json){
         JsonObject& jRecipe = it->as<JsonObject&>();
         if(jRecipe["id"].as<int>() != 0){
           (*ptrRecipes)[cuntr].id = jRecipe["id"];
-          (*ptrRecipes)[cuntr].name = jRecipe["name"];
+          jRecipe["name"].as<String>().toCharArray((*ptrRecipes)[cuntr].name,50);
           (*ptrRecipes)[cuntr].sourceNodeId = jRecipe["sourceNodeId"];
           (*ptrRecipes)[cuntr].sourceThingId = jRecipe["sourceThingId"];
           (*ptrRecipes)[cuntr].sourceValue = jRecipe["sourceValue"];

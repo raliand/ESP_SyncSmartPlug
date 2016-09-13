@@ -30,6 +30,7 @@ code for time conversion based on http://stackoverflow.com/
 #define PERCENT 5 //float
 #define GENERIC 6 //float
 #define CLOCK   7 //unsigned long
+#define DATE   8 //unsigned long
 
 //values
 #define ON    1
@@ -39,14 +40,14 @@ code for time conversion based on http://stackoverflow.com/
 
 #define RECIPE_JSON_SIZE (JSON_OBJECT_SIZE(11))
 #define THING_JSON_SIZE (JSON_OBJECT_SIZE(7))
-#define NODE_JSON_SIZE (JSON_OBJECT_SIZE(3))
+#define NODE_JSON_SIZE (JSON_OBJECT_SIZE(4))
 #define RECIPES_LEN 10
 #define THINGS_LEN 4
 #define NODES_LEN 20
 
 struct Recipe {
    int id;
-   const char* name;
+   char name[50];
    int sourceNodeId;
    int sourceThingId;
    float sourceValue;
@@ -69,6 +70,7 @@ struct Thing {
 struct Node {
    long id;
    const char* name;
+   char ip[16];
 };
 
 static Recipe arrRecipes[RECIPES_LEN];
@@ -93,10 +95,11 @@ void serializeRecipes(const Recipe (*ptrRecipes)[RECIPES_LEN], char* json, size_
 bool deserializeThings(Thing (*ptrThings)[THINGS_LEN], char* json);
 int deserializeNodes(Node (*ptrNodes)[NODES_LEN], char* json);
 bool deserializeRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], char* json);
-volatile bool saveToFile(JsonArray& jArr, const char* cFileName);
-volatile bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]);
+bool saveToFile(JsonArray& jArr, const char* cFileName);
+bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]);
 bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]);
 bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]);
+bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer);
 void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN]);
 void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, float rThingValue, unsigned long ntp_timer);
 bool deleteNodes(void);
