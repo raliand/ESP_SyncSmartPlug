@@ -161,7 +161,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
           int index = thing["id"].as<int>() - 1;
           //aThings[index].name = thing["name"].as<String>().c_str();
           arrThings[index].type = thing["type"].as<int>();
-          arrThings[index].value = thing["value"].as<float>();
+          strcpy(arrThings[index].value, thing["value"]);
           arrThings[index].override = thing["override"].as<bool>();
           arrThings[index].last_updated = millis()/1000+ntp_timer;
           bool saved = saveThingsToFile(&arrThings);
@@ -309,8 +309,9 @@ void loop() {
             *separator1 = 0;
             int rThingId = atoi(command);
             ++separator1;
-            String rThingValue = String(separator1);
-            updateRecipes(&arrRecipes, atol(rNodeId.c_str()),rThingId,atof(rThingValue.c_str()), ntp_timer);
+            char rThingValue[VALUE_SIZE];// = String(separator1);
+            strcpy(rThingValue, String(separator1).c_str());
+            updateRecipes(&arrRecipes, atol(rNodeId.c_str()),rThingId,&rThingValue, ntp_timer);
             saveRecipesToFile(&arrRecipes);
             // Do something with servoId and position  vb
           }
@@ -329,7 +330,7 @@ void loop() {
   if(web_socket_timer < millis()){
     for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
       const Thing tmpThing = arrThings[idx];
-      if (tmpThing.id == 2 || tmpThing.id == 3){
+      //if (tmpThing.id == 2 || tmpThing.id == 3){
         char buffer[JSON_OBJECT_SIZE(10)];
         StaticJsonBuffer<JSON_OBJECT_SIZE(10)> jsonBuffer;
         JsonObject &msg = jsonBuffer.createObject();
@@ -344,7 +345,7 @@ void loop() {
         //msg.printTo(DBG_OUTPUT_PORT);
         //DBG_OUTPUT_PORT.print("\n");
         webSocket.broadcastTXT(buffer);
-      }
+      //}
     }
     web_socket_timer = millis()+1000;
   }

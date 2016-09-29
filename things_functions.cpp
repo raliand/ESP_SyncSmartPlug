@@ -70,25 +70,25 @@ void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
     (*ptrThings)[0].id = 1;
     (*ptrThings)[0].name = "Plug";
     (*ptrThings)[0].type = SWITCH;
-    (*ptrThings)[0].value = OFF;
+    strcpy((*ptrThings)[0].value, "0");
     (*ptrThings)[0].override = false;
     (*ptrThings)[0].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[1].id = 2;
     (*ptrThings)[1].name = "Current Wats";
     (*ptrThings)[1].type = GENERIC;
-    (*ptrThings)[1].value = 0;
+    strcpy((*ptrThings)[1].value, "0");
     (*ptrThings)[1].override = false;
     (*ptrThings)[1].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[2].id = 3;
     (*ptrThings)[2].name = "Daily Wats per Hour";
     (*ptrThings)[2].type = GENERIC;
-    (*ptrThings)[2].value = 1;
+    strcpy((*ptrThings)[2].value, "1");
     (*ptrThings)[2].override = false;
     (*ptrThings)[2].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[3].id = 4;
     (*ptrThings)[3].name = "Time of day";
     (*ptrThings)[3].type = CLOCK;
-    (*ptrThings)[3].value = seconds_since_midnight(millis()/1000+ntp_timer);
+    strcpy((*ptrThings)[3].value, String(seconds_since_midnight(millis()/1000+ntp_timer)).c_str());
     (*ptrThings)[3].override = false;
     (*ptrThings)[3].last_updated = millis()/1000+ntp_timer;
     saveThingsToFile(ptrThings);
@@ -100,10 +100,10 @@ void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
   DBG_OUTPUT_PORT.println(sThings);
   delay(100);
 
-  (*ptrThings)[1].value = 0;
-  (*ptrThings)[2].value = 0;
-  (*ptrThings)[3].value = seconds_since_midnight(millis()/1000+ntp_timer);
-  if(!(*ptrThings)[0].override) (*ptrThings)[0].value = ON;
+  // (*ptrThings)[1].value = 0;
+  // (*ptrThings)[2].value = 0;
+  // (*ptrThings)[3].value = seconds_since_midnight(millis()/1000+ntp_timer);
+  // if(!(*ptrThings)[0].override) (*ptrThings)[0].value = ON;
 }
 
 void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
@@ -113,12 +113,12 @@ void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
     String name = "Max Watts/Hour";
     name.toCharArray((*ptrRecipes)[0].name,50);
     (*ptrRecipes)[0].localThingId = 1;
-    (*ptrRecipes)[0].localValue = 0;
+    strcpy((*ptrRecipes)[0].localValue, "0");
     (*ptrRecipes)[0].sourceNodeId = CHIP_ID;
     (*ptrRecipes)[0].sourceThingId = 3;
-    (*ptrRecipes)[0].sourceValue = 0;
+    strcpy((*ptrRecipes)[0].sourceValue, "0");
     (*ptrRecipes)[0].relation = BIGGER_THAN;
-    (*ptrRecipes)[0].targetValue = 20;
+    strcpy((*ptrRecipes)[0].targetValue, "20");
     saveRecipesToFile(ptrRecipes);
     delay(100);
     serializeRecipes(ptrRecipes, sRecipes, RECIPE_JSON_SIZE*RECIPES_LEN);
@@ -130,16 +130,16 @@ void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
 
   DBG_OUTPUT_PORT.print("sRecipes ");
   DBG_OUTPUT_PORT.println(sRecipes);
-  //deserializeRecipes(&arrRecipes,sRecipes);
 }
 
 void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN], long nodeId, unsigned long ntp_timer){
-  long sensorValue = 0; //analogRead(sensorIn);
+  long sensorValue = 0; 
   unsigned long curr_time = millis()/1000+ntp_timer;
-  digitalWrite(switchOut, (*ptrThings)[0].value);
-  (*ptrThings)[3].value = seconds_since_midnight(curr_time);
+  digitalWrite(switchOut, String((*ptrThings)[0].value).toFloat());
+  strcpy((*ptrThings)[3].value, String(seconds_since_midnight(curr_time)).c_str());
   (*ptrThings)[3].last_updated = curr_time;
-  updateRecipes(ptrRecipes, nodeId, 4, seconds_since_midnight(curr_time), curr_time);
+  updateRecipes(ptrRecipes, nodeId, 1, &(*ptrThings)[0].value, curr_time);
+  updateRecipes(ptrRecipes, nodeId, 4, &(*ptrThings)[3].value, curr_time);
   if (micros() - startMicros > sampleTime) {// Displays to the serial port the results, after one second
     sensorValue = analogRead(sensorIn);
     range = (2 + ((maxVoltage - minVoltage) / 5));
@@ -149,12 +149,13 @@ void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_
     float vrms = rms * 240;
     if (cycleCounter < 48 || cycleCounter > 52 || vrms < 300) vrms = 0;
     display.showNumberDec(round(vrms), false);
-    (*ptrThings)[1].value = vrms;
+    strcpy((*ptrThings)[1].value, String(vrms).c_str());
     (*ptrThings)[1].last_updated = curr_time;
+    updateRecipes(ptrRecipes, nodeId, 2, &(*ptrThings)[1].value, curr_time);
     dwh = dwh + (vrms / 3600);
-    (*ptrThings)[2].value = dwh;
+    strcpy((*ptrThings)[2].value, String(dwh).c_str());
     (*ptrThings)[2].last_updated = curr_time;
-    updateRecipes(ptrRecipes, nodeId, 3, dwh, curr_time);
+    updateRecipes(ptrRecipes, nodeId, 3, &(*ptrThings)[2].value, curr_time);
     //saveThingsToFile(ptrThings);
     cycleCounter = 0;
     startMicros = micros();

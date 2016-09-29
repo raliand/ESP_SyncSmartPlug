@@ -73,7 +73,7 @@ bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]) {
       tmpJThing["id"] = tmpThing.id;
       tmpJThing["name"] = tmpThing.name;
       tmpJThing["type"] = tmpThing.type;
-      tmpJThing["value"] = String(tmpThing.value).toFloat();
+      tmpJThing["value"] = String(tmpThing.value);
       tmpJThing["override"] = tmpThing.override;
       tmpJThing["last_updated"] = tmpThing.last_updated;
     }
@@ -100,11 +100,11 @@ bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]) {
       tmpJRecipe["name"] = String(tmpRecipe.name);
       tmpJRecipe["sourceNodeId"] = tmpRecipe.sourceNodeId;
       tmpJRecipe["sourceThingId"] = tmpRecipe.sourceThingId;
-      tmpJRecipe["sourceValue"] = tmpRecipe.sourceValue;
+      tmpJRecipe["sourceValue"] = String(tmpRecipe.sourceValue);
       tmpJRecipe["relation"] = tmpRecipe.relation;
       tmpJRecipe["localThingId"] = tmpRecipe.localThingId;
-      tmpJRecipe["targetValue"] = tmpRecipe.targetValue;
-      tmpJRecipe["localValue"] = tmpRecipe.localValue;
+      tmpJRecipe["targetValue"] = String(tmpRecipe.targetValue);
+      tmpJRecipe["localValue"] = String(tmpRecipe.localValue);
       tmpJRecipe["last_updated"] = tmpRecipe.last_updated;
     }
   }
@@ -123,11 +123,11 @@ bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned 
   recipe["name"].as<String>().toCharArray((*ptrRecipes)[index].name,50);
   (*ptrRecipes)[index].sourceNodeId = recipe["sourceNodeId"].as<long>();
   (*ptrRecipes)[index].sourceThingId = recipe["sourceThingId"].as<int>();
-  (*ptrRecipes)[index].sourceValue = recipe["sourceValue"].as<float>();
+  recipe["sourceValue"].as<String>().toCharArray((*ptrRecipes)[index].sourceValue,VALUE_SIZE);
   (*ptrRecipes)[index].relation = recipe["relation"].as<int>();
   (*ptrRecipes)[index].localThingId = recipe["localThingId"].as<int>();
-  (*ptrRecipes)[index].targetValue = recipe["targetValue"].as<float>();
-  (*ptrRecipes)[index].localValue = recipe["localValue"].as<float>();
+  recipe["targetValue"].as<String>().toCharArray((*ptrRecipes)[index].targetValue,VALUE_SIZE);
+  recipe["localValue"].as<String>().toCharArray((*ptrRecipes)[index].localValue,VALUE_SIZE);
   (*ptrRecipes)[index].last_updated = millis()/1000+ntp_timer;
   return saveRecipesToFile(ptrRecipes);
 }
@@ -157,7 +157,7 @@ void serializeThings(const Thing (*ptrThings)[THINGS_LEN], char* json, size_t ma
         tmpJThing["id"] = tmpThing.id;
         tmpJThing["name"] = tmpThing.name;
         tmpJThing["type"] = tmpThing.type;
-        tmpJThing["value"] = String(tmpThing.value).toFloat();
+        tmpJThing["value"] = tmpThing.value;
         tmpJThing["override"] = tmpThing.override;
         tmpJThing["last_updated"] = tmpThing.last_updated;
       }
@@ -176,11 +176,11 @@ void serializeRecipes(const Recipe (*ptrRecipes)[RECIPES_LEN], char* json, size_
         tmpJRecipe["name"] = String(tmpRecipe.name);
         tmpJRecipe["sourceNodeId"] = tmpRecipe.sourceNodeId;
         tmpJRecipe["sourceThingId"] = tmpRecipe.sourceThingId;
-        tmpJRecipe["sourceValue"] = tmpRecipe.sourceValue;
+        tmpJRecipe["sourceValue"] = String(tmpRecipe.sourceValue);
         tmpJRecipe["relation"] = tmpRecipe.relation;
         tmpJRecipe["localThingId"] = tmpRecipe.localThingId;
-        tmpJRecipe["targetValue"] = tmpRecipe.targetValue;
-        tmpJRecipe["localValue"] = tmpRecipe.localValue;
+        tmpJRecipe["targetValue"] = String(tmpRecipe.targetValue);
+        tmpJRecipe["localValue"] = String(tmpRecipe.localValue);
         tmpJRecipe["last_updated"] = tmpRecipe.last_updated;
       }
     }
@@ -218,7 +218,8 @@ bool deserializeThings(Thing (*ptrThings)[THINGS_LEN], char* json){
           (*ptrThings)[cuntr].id = jThing["id"];
           (*ptrThings)[cuntr].name = jThing["name"];
           (*ptrThings)[cuntr].type = jThing["type"];
-          (*ptrThings)[cuntr].value = jThing["value"];
+          //(*ptrThings)[cuntr].value = jThing["value"];
+          jThing["value"].as<String>().toCharArray((*ptrThings)[cuntr].value,VALUE_SIZE);
           (*ptrThings)[cuntr].override = jThing["override"];
           (*ptrThings)[cuntr].last_updated = jThing["last_updated"];
           cuntr++;
@@ -239,11 +240,11 @@ bool deserializeRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], char* json){
           jRecipe["name"].as<String>().toCharArray((*ptrRecipes)[cuntr].name,50);
           (*ptrRecipes)[cuntr].sourceNodeId = jRecipe["sourceNodeId"];
           (*ptrRecipes)[cuntr].sourceThingId = jRecipe["sourceThingId"];
-          (*ptrRecipes)[cuntr].sourceValue = jRecipe["sourceValue"];
+          jRecipe["sourceValue"].as<String>().toCharArray((*ptrRecipes)[cuntr].sourceValue,VALUE_SIZE);
           (*ptrRecipes)[cuntr].relation = jRecipe["relation"];
           (*ptrRecipes)[cuntr].localThingId = jRecipe["localThingId"];
-          (*ptrRecipes)[cuntr].targetValue = jRecipe["targetValue"];
-          (*ptrRecipes)[cuntr].localValue = jRecipe["localValue"];
+          jRecipe["targetValue"].as<String>().toCharArray((*ptrRecipes)[cuntr].targetValue,VALUE_SIZE);
+          jRecipe["localValue"].as<String>().toCharArray((*ptrRecipes)[cuntr].localValue,VALUE_SIZE);
           (*ptrRecipes)[cuntr].last_updated = jRecipe["last_updated"];
           cuntr++;
           lastRINDEX++;
@@ -260,34 +261,33 @@ void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES
 
   for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
     Thing aThing = (*ptrThings)[idx];
-    //aThing.value = 0;
     for( int ridx = 0 ; ridx < RECIPES_LEN ; ridx++ ){
       Recipe aRecipe = (*ptrRecipes)[ridx];
       if (aRecipe.localThingId == aThing.id && !aThing.override) {
-        //DBG_OUTPUT_PORT.println("Processing Recipe For... " + String(aThing.name));
+        //DBG_OUTPUT_PORT.println("Processing Recipe For... " + String(aRecipe.sourceValue) + " - "+ String(aRecipe.targetValue));
         switch (aRecipe.relation) {
           case EQUALS: {
-              if(aRecipe.sourceValue == aRecipe.targetValue) (*ptrThings)[idx].value = aRecipe.localValue;
+              if(String(aRecipe.sourceValue).toFloat() == String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
           }
           break;
           case NOT_EQUALS: {
-              if(aRecipe.sourceValue != aRecipe.targetValue) (*ptrThings)[idx].value = aRecipe.localValue;
+              if(String(aRecipe.sourceValue).toFloat() != String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
           }
           break;
           case BIGGER_THAN: {
-              if(aRecipe.sourceValue > aRecipe.targetValue) (*ptrThings)[idx].value = aRecipe.localValue;
+              if(String(aRecipe.sourceValue).toFloat() > String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
           }
           break;
           case SMALLER_THAN: {
-              if(aRecipe.sourceValue < aRecipe.targetValue) (*ptrThings)[idx].value = aRecipe.localValue;
+              if(String(aRecipe.sourceValue).toFloat() < String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
           }
           break;
           case NOT_BIGGER_THAN: {
-              if(aRecipe.sourceValue <= aRecipe.targetValue) (*ptrThings)[idx].value = aRecipe.localValue;
+              if(String(aRecipe.sourceValue).toFloat() <= String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
           }
           break;
           case NOT_SMALLER_THAN: {
-              if(aRecipe.sourceValue >= aRecipe.targetValue) (*ptrThings)[idx].value = aRecipe.localValue;
+              if(String(aRecipe.sourceValue).toFloat() >= String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
           }
           break;
           default :
@@ -298,12 +298,11 @@ void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES
   }
 }
 
-void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, float rThingValue, unsigned long ntp_timer){
+void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, char (*rThingValue)[VALUE_SIZE], unsigned long ntp_timer){
   for( int ridx = 0 ; ridx < RECIPES_LEN ; ridx++ ){
     if ((*ptrRecipes)[ridx].sourceNodeId == rNodeId && (*ptrRecipes)[ridx].sourceThingId == rThingId) {
-      (*ptrRecipes)[ridx].sourceValue = rThingValue;
+      strcpy((*ptrRecipes)[ridx].sourceValue, (*rThingValue));
       (*ptrRecipes)[ridx].last_updated = millis()/1000+ntp_timer;
-      break;
     }
   }
 }

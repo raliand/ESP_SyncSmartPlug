@@ -22,15 +22,15 @@ code for time conversion based on http://stackoverflow.com/
 #define NOT_SMALLER_THAN  5
 
 //Thing types
-#define LONG    0
-#define SWITCH  1 //short
-#define TEMP    2 //float
-#define HUMID   3 //float
-#define PRESS   4 //float
-#define PERCENT 5 //float
-#define GENERIC 6 //float
-#define CLOCK   7 //unsigned long
-#define DATE   8 //unsigned long
+#define LONG      0
+#define SWITCH    1 //short
+#define TEMP      2 //float
+#define HUMID     3 //float
+#define PRESS     4 //float
+#define PERCENT   5 //float
+#define GENERIC   6 //float
+#define CLOCK     7 //unsigned long
+#define DATE_TIME 8 //unsigned long
 
 //values
 #define ON    1
@@ -41,6 +41,7 @@ code for time conversion based on http://stackoverflow.com/
 #define RECIPE_JSON_SIZE (JSON_OBJECT_SIZE(11))
 #define THING_JSON_SIZE (JSON_OBJECT_SIZE(7))
 #define NODE_JSON_SIZE (JSON_OBJECT_SIZE(4))
+#define VALUE_SIZE 8
 #define RECIPES_LEN 10
 #define THINGS_LEN 4
 #define NODES_LEN 20
@@ -50,11 +51,11 @@ struct Recipe {
    char name[50];
    int sourceNodeId;
    int sourceThingId;
-   float sourceValue;
+   char sourceValue[VALUE_SIZE];
    int relation;
    int localThingId;
-   float targetValue;
-   float localValue;
+   char targetValue[VALUE_SIZE];
+   char localValue[VALUE_SIZE];
    unsigned long last_updated;
 };
 
@@ -62,7 +63,7 @@ struct Thing {
    int id;
    const char* name;
    int type;
-   float value;
+   char value[VALUE_SIZE];
    bool override = false;
    unsigned long last_updated;
 };
@@ -101,7 +102,7 @@ bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]);
 bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]);
 bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer);
 void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN]);
-void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, float rThingValue, unsigned long ntp_timer);
+void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, char (*rThingValue)[VALUE_SIZE], unsigned long ntp_timer);
 bool deleteNodes(void);
 bool deleteThings(void);
 bool deleteRecipes(void);
