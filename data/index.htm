@@ -175,7 +175,7 @@
 
 			$(document).ready(function() {
         //startWebsocket(window.location.hostname);
-				startWebsocket("10.0.0.103");
+				startWebsocket("10.0.0.104");
         for(var i = 0, len = relation.length; i < len; i++){
           //instead of appending each `<option>` element, it is a better practice to either concoct a string of all the HTML or create an array that will later be turned into a string (here we are pushing new indexes onto an `output` array)
           output_rel.push('<option value="' + i +'">' + relation[i] + '</option>');
@@ -212,42 +212,42 @@
 										things[obj.nodeId+"_"+thing['id']] = thing;
                     output_things.push('<option value="' + obj.nodeId+"_"+thing['id'] +'">' + thing['name'] + '</option>');
                     if(thing['type'] == 1) output_switches.push('<option value="' + thing['id'] +'">' + thing['name'] + '</option>');
-									}
-                  if($.mobile.activePage.attr('id') == "index"){
-  									switch(thing['id']){
-  										case 1: {//PLUG
-  													window.console.log(thing['name'] + ": " + thing['value']);
-  													if(thing['override']){
-  														$("#flip-ovrd-sw").val('on').slider('refresh');
-  														$("#smart-plug-sw").show();
-  													} else {
-  														$("#flip-ovrd-sw").val('off').slider('refresh');
-  														$("#smart-plug-sw").hide();
-  													}
-  													if(thing['value'] == 1){
-  														$("#flip-plug-sw").val('on').slider('refresh');
-  													} else {
-  														$("#flip-plug-sw").val('off').slider('refresh');
-  													}
-  													$("#plug").text(thing['name'] + ": " + thing['value']);
-  												}
-  												break;
-  										case 2: {//WATTS
-  													window.console.log(thing['name'] + ": " + thing['value']);
-                            doUpdate(parseFloat(thing['value']));
-          									$("#watts").text(thing['name'] + ": " + thing['value']);
-          									var d = new Date("January 1, 2000 02:00:00");
-          									d.setUTCSeconds(d.getUTCSeconds() + thing['lastUpdate']);
-          									$("#lastupdate-index").html(d.toLocaleString());
-  												}
-  												break;
-  										case 3: {//DAILY-WATTS
-  													window.console.log(thing['name'] + ": " + thing['value']);
-  													$("#daily-kwh").text(thing['name'] + ": " + thing['value']);
-  												}
-  												break;
-  									}
-                  }
+									} else things[obj.nodeId+"_"+thing['id']] = thing;
+                  // if($.mobile.activePage.attr('id') == "index"){
+  								// 	switch(thing['id']){
+  								// 		case 1: {//PLUG
+  								// 					window.console.log(thing['name'] + ": " + thing['value']);
+  								// 					if(thing['override'] == 1){
+  								// 						$("#flip-ovrd-sw").val('on').slider('refresh');
+  								// 						//$("#smart-plug-sw").show();
+  								// 					} else {
+  								// 						$("#flip-ovrd-sw").val('off').slider('refresh');
+  								// 						//$("#smart-plug-sw").hide();
+  								// 					}
+  								// 					if(thing['value'] == 1){
+  								// 						$("#flip-plug-sw").val('ON').slider('refresh');
+  								// 					} else {
+  								// 						$("#flip-plug-sw").val('OFF').slider('refresh');
+  								// 					}
+  								// 					$("#plug").text(thing['name'] + ": " + on_off_select[thing['value']]);
+  								// 				}
+  								// 				break;
+  								// 		case 2: {//WATTS
+  								// 					window.console.log(thing['name'] + ": " + thing['value']);
+                  //           //doUpdate(parseFloat(thing['value']));
+          				// 					$("#watts").text(thing['name'] + ": " + thing['value']);
+          				// 					var d = new Date("January 1, 2000 00:00:00");
+          				// 					d.setUTCSeconds(d.getUTCSeconds() + thing['lastUpdate']);
+          				// 					$("#lastupdate-index").html(d.toLocaleString());
+  								// 				}
+  								// 				break;
+  								// 		case 3: {//DAILY-WATTS
+  								// 					window.console.log(thing['name'] + ": " + thing['value']);
+  								// 					$("#daily-kwh").text(thing['name'] + ": " + thing['value']);
+  								// 				}
+  								// 				break;
+  								// 	}
+                  // }
 								});
 							} else if(obj.command == "response_nodes"){
 								$.each(obj.nodes, function(idx, node){
@@ -259,7 +259,7 @@
                     $("#nodeLinkList").append( content ).trigger("create");
                     sendCommand(websockethost, "request_things");
 										if(!(node['ip'] in webSockets)) setTimeout(function(){startWebsocket(node['ip'])}, 200);
-									}
+									} else nodes[node['id']] = node;
                   if(firstNode) {
                     currentNode = obj.nodeId;
                     firstNode = false;
@@ -270,7 +270,7 @@
 									window.console.log(recipe);
   								if(!(obj.nodeId+"_"+recipe['id'] in recipes)){
                     nextRecipeId = recipe['id'];
-                    recipes[obj.nodeId+"_"+recipe['id']] = recipe; //obj.recipes;
+                    recipes[obj.nodeId+"_"+recipe['id']] = recipe;
                     var sourceThing = things[obj.nodeId+"_"+recipe['sourceThingId']];
                     var localThing = things[obj.nodeId+"_"+recipe['localThingId']];
                     var things_select = "<select id=\""+obj.nodeId+"_"+recipe['id']+"_thing\" data-native-menu=\"false\" data-inline=\"true\">"
@@ -304,20 +304,30 @@
                     $("#set" + obj.nodeId+"_"+recipe['id']).on( "collapsibleexpand ", function () {
     									//sendCommand(item['nodeName'] + ".local", "request_things");
                     });
-                  }
+                  } else recipes[obj.nodeId+"_"+recipe['id']] = recipe;
 								});
 							} else if(obj.command == "thing_update"){
                 window.console.log(evt.data);
-								if(obj.thingId == 2) {
-									doUpdate(parseFloat(obj.value));
-									$("#watts").text(obj.thingName + ": " + obj.value);
-									var d = new Date("January 1, 2000 02:00:00");
-									d.setUTCSeconds(d.getUTCSeconds() + obj.lastUpdate);
-									$("#lastupdate-index").html(d.toLocaleString());
-								}
-								if(obj.thingId == 3) {
-									$("#daily-kwh").text(obj.thingName + ": " + obj.value);
-								}
+                switch(obj.thingId){
+                  case 1: {
+                            $("#plug").text(obj.thingName + " is " + on_off_select[obj.value]);
+                            $("#flip-plug-sw").val(on_off_select[obj.value]).slider('refresh');
+                            $("#flip-ovrd-sw").val(on_off_select[obj.value]).slider('refresh');
+                          }
+                          break;
+                  case 2: {
+                            doUpdate(parseFloat(obj.value));
+                            $("#watts").text(obj.thingName + ": " + obj.value);
+                            var d = new Date("January 1, 2000 00:00:00");
+                            d.setUTCSeconds(d.getUTCSeconds() + obj.lastUpdate);
+          									$("#lastupdate-index").html(d.toLocaleString());
+                          }
+                          break;
+                  case 3: {
+                            $("#daily-kwh").text(obj.thingName + ": " + obj.value);
+                          }
+                          break;
+                }
 							}
 						};
 						ws.onerror = function(evt) {
@@ -360,6 +370,7 @@
                                     + output_on_off_select.join('') + "</select>";
                 $('#'+recipeId+'_value_select').html(on_off_value_select);
                 $('#'+recipeId+'_value_select').trigger("create");
+                $("#"+recipeId+"_value_select option[value='"+parseFloat(defaultValue)+"']").attr('selected', 'selected');
                 $('#'+recipeId+'_value').selectmenu('refresh');
                 break;
             case 7:
@@ -456,7 +467,8 @@
 					var sendObj = {
 						'command' : command
 					};
-					webSockets[websockethost].send(JSON.stringify(sendObj));
+          window.console.log("sending "+command+" to " + websockethost);
+          webSockets[websockethost].send(JSON.stringify(sendObj));
 				} else {
 					setTimeout(function(){sendCommand(websockethost, "request_things")}, 200);
 				}
@@ -500,6 +512,47 @@
 				$page.page();
 				$.mobile.changePage( $page, options );
 			}
+
+      $("#flip-ovrd-sw").change(function () {
+      	//window.console.log("here");
+      	sVal = $(this).val();
+      	// if (sVal == 'on') {
+      	// 	$("#smart-plug-sw").show();
+      	// } else {
+      	// 	$("#smart-plug-sw").hide();
+      	// }
+      	if (currentNode != 0) {
+      		var oThing = things[currentNode + '_1'];
+      		oThing.override = (sVal=='on')?true:false;
+      		window.console.log(oThing);
+      		things[currentNode + '_1'] = oThing;
+      		var jObj = {
+      			command : 'save_thing',
+      			thing : oThing
+      		}
+      		//window.console.log(currentWSH);
+      		sendObject(currentWSH, jObj);
+      	}
+      });
+
+      $("#flip-plug-sw").change(function () {
+      	sVal = $(this).val();
+      	if (currentNode != 0) {
+      		var oThing = things[currentNode + '_1'];
+      		oThing.value = (sVal=='ON')?1:0;
+      		window.console.log(oThing);
+      		things[currentNode + '_1'] = oThing;
+          if($("#flip-ovrd-sw").val() != 'on'){
+            sendCommand(currentWSH, 'temp_override');
+          }
+          var jObj = {
+            command : 'save_thing',
+            thing : oThing
+          }
+          sendObject(currentWSH, jObj);
+      		//window.console.log(currentWSH);
+      	}
+      });
 		</script>
     </head>
     <body id="nodeList">
@@ -526,28 +579,29 @@
 			<div data-role="content">
 				<div id="chart1" style="height: 40%; width: 100%; position: relative;"></div>
 				</br>
-				<label id="watts">Watts</label>
+				<label id="plug">Plug</label>
+        <label id="watts">Watts</label>
 				<label id="daily-kwh">Daily Watts/hour</label>
 				<div class="ui-block-a">
-			        <div class="ui-body">
-			            <div id="override-sw" class="override-sw">
-							<select name="flip-ovrd-sw" id="flip-ovrd-sw" data-role="slider">
-								<option value="off">Override Off</option>
-								<option value="on">Override On</option>
-							</select>
-						</div>
-			        </div>
+			     <div class="ui-body">
+			        <div id="override-sw" class="override-sw">
+    					  <select name="flip-ovrd-sw" id="flip-ovrd-sw" data-role="slider">
+                   <option value="OFF">Override Off</option>
+                   <option value="ON">Override On</option>
+    		        </select>
+						  </div>
 			    </div>
+			  </div>
 				<div class="ui-block-b">
-			        <div class="ui-body">
-			            <div id="smart-plug-sw" class="smart-plug-sw">
+			    <div class="ui-body">
+			      <div id="smart-plug-sw" class="smart-plug-sw">
 							<select name="flip-plug-sw" id="flip-plug-sw" data-role="slider">
-								<option value="off">Plug Off</option>
-								<option value="on">Plug On</option>
+								<option value="OFF">Plug Off</option>
+								<option value="ON">Plug On</option>
 							</select>
 						</div>
-			        </div>
-			    </div>
+			    </div>
+			  </div>
 			</div>
 			<div data-role="footer" id="statusbar" data-position="fixed">
 				<h4>Last Update: <span id="lastupdate-index"></span></h4>
@@ -610,47 +664,8 @@
 		</div>
     </body>
 <script>
-
-$("#flip-ovrd-sw").change(function () {
-	//window.console.log("here");
-	sVal = $(this).val();
-	if (sVal == 'on') {
-		$("#smart-plug-sw").show();
-	} else {
-		$("#smart-plug-sw").hide();
-	}
-	if (currentNode != 0) {
-		var oThing = things[currentNode + '_1'];
-		oThing.override = (sVal=='on')?true:false;
-		window.console.log(oThing);
-		things[currentNode + '_1'] = oThing;
-		var jObj = {
-			command : 'save_thing',
-			thing : oThing
-		}
-		//window.console.log(currentWSH);
-		sendObject(currentWSH, jObj);
-	}
-});
-
-$("#flip-plug-sw").change(function () {
-	sVal = $(this).val();
-	if (currentNode != 0) {
-		var oThing = things[currentNode + '_1'];
-		oThing.value = (sVal=='on')?1:0;
-		window.console.log(oThing);
-		things[currentNode + '_1'] = oThing;
-		var jObj = {
-			command : 'save_thing',
-			thing : oThing
-		}
-		//window.console.log(currentWSH);
-		sendObject(currentWSH, jObj);
-	}
-});
-
 var storedData = [];
-var n = 20;
+var n = 120;
 var x = (new Date()).getTime(); // current time
 /* initialize plot*/
 for(i=0; i<n; i++){

@@ -166,7 +166,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
           arrThings[index].last_updated = millis()/1000+ntp_timer;
           bool saved = saveThingsToFile(&arrThings);
           DBG_OUTPUT_PORT.println("Updated thing value.");
-          String sJson = "{\"command\":\"response_save_thing\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
+          String sJson = "{\"command\":\"response_save_thing\",\"nodeId\":"+String(CHIP_ID)+",\"thingId\":\""+thing["id"].as<int>()+"\",\"success\":"+(saved ? "true" : "false")+"}";
           webSocket.sendTXT(num, sJson);
           DBG_OUTPUT_PORT.println(system_get_free_heap_size());
         } else if (response["command"].as<String>().compareTo("save_recipe") == 0){
@@ -174,6 +174,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
           DBG_OUTPUT_PORT.println("Updated recipe value.");
           String sJson = "{\"command\":\"response_save_recipe\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
           webSocket.sendTXT(num, sJson);
+          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+        } else if (response["command"].as<String>().compareTo("temp_override") == 0){
+          setSkipRecipeId(getFiredRecipeId());
+          DBG_OUTPUT_PORT.println("Temp override.");
           DBG_OUTPUT_PORT.println(system_get_free_heap_size());
         } else {
           StaticJsonBuffer<200> jsonBuffer;

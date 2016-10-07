@@ -99,11 +99,7 @@ void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
   DBG_OUTPUT_PORT.print("sThings ");
   DBG_OUTPUT_PORT.println(sThings);
   delay(100);
-
-  // (*ptrThings)[1].value = 0;
-  // (*ptrThings)[2].value = 0;
-  // (*ptrThings)[3].value = seconds_since_midnight(millis()/1000+ntp_timer);
-  // if(!(*ptrThings)[0].override) (*ptrThings)[0].value = ON;
+  strcpy((*ptrThings)[0].value, "0");
 }
 
 void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
@@ -133,7 +129,7 @@ void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
 }
 
 void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN], long nodeId, unsigned long ntp_timer){
-  long sensorValue = 0; 
+  long sensorValue = 0;
   unsigned long curr_time = millis()/1000+ntp_timer;
   digitalWrite(switchOut, String((*ptrThings)[0].value).toFloat());
   strcpy((*ptrThings)[3].value, String(seconds_since_midnight(curr_time)).c_str());

@@ -1,5 +1,17 @@
 #include "spiffs_functions.h"
 
+int firedRecipeId = -1;
+int skipRecipeId = -1;
+
+
+int getFiredRecipeId(){
+  return firedRecipeId;
+}
+
+void setSkipRecipeId(int newSkipRecipeId){
+  skipRecipeId = newSkipRecipeId;
+}
+
 bool loadFromFileNew(const char* cFileName, char* json, size_t maxSize) {
   File spifsFile = SPIFFS.open(cFileName, "r");
   if (!spifsFile) {
@@ -258,7 +270,7 @@ bool deserializeRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], char* json){
 
 void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN]){
   //DBG_OUTPUT_PORT.print("Processing Recipes... ");
-
+  firedRecipeId = -1;
   for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
     Thing aThing = (*ptrThings)[idx];
     for( int ridx = 0 ; ridx < RECIPES_LEN ; ridx++ ){
@@ -267,27 +279,69 @@ void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES
         //DBG_OUTPUT_PORT.println("Processing Recipe For... " + String(aRecipe.sourceValue) + " - "+ String(aRecipe.targetValue));
         switch (aRecipe.relation) {
           case EQUALS: {
-              if(String(aRecipe.sourceValue).toFloat() == String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+              if(String(aRecipe.sourceValue).toFloat() == String(aRecipe.targetValue).toFloat()) {
+                if(aRecipe.id == skipRecipeId){
+                  strcpy((*ptrThings)[idx].value, String(abs(String(aRecipe.localValue).toFloat() - 1)).c_str());
+                } else {
+                  strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+                }
+                firedRecipeId = aRecipe.id;
+              }
           }
           break;
           case NOT_EQUALS: {
-              if(String(aRecipe.sourceValue).toFloat() != String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+            if(String(aRecipe.sourceValue).toFloat() != String(aRecipe.targetValue).toFloat()) {
+              if(aRecipe.id == skipRecipeId){
+                strcpy((*ptrThings)[idx].value, String(abs(String(aRecipe.localValue).toFloat() - 1)).c_str());
+              } else {
+                strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+              }
+              firedRecipeId = aRecipe.id;
+            }
           }
           break;
           case BIGGER_THAN: {
-              if(String(aRecipe.sourceValue).toFloat() > String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+            if(String(aRecipe.sourceValue).toFloat() > String(aRecipe.targetValue).toFloat()) {
+              if(aRecipe.id == skipRecipeId){
+                strcpy((*ptrThings)[idx].value, String(abs(String(aRecipe.localValue).toFloat() - 1)).c_str());
+              } else {
+                strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+              }
+              firedRecipeId = aRecipe.id;
+            }
           }
           break;
           case SMALLER_THAN: {
-              if(String(aRecipe.sourceValue).toFloat() < String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+            if(String(aRecipe.sourceValue).toFloat() < String(aRecipe.targetValue).toFloat()) {
+              if(aRecipe.id == skipRecipeId){
+                strcpy((*ptrThings)[idx].value, String(abs(String(aRecipe.localValue).toFloat() - 1)).c_str());
+              } else {
+                strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+              }
+              firedRecipeId = aRecipe.id;
+            }
           }
           break;
           case NOT_BIGGER_THAN: {
-              if(String(aRecipe.sourceValue).toFloat() <= String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+            if(String(aRecipe.sourceValue).toFloat() <= String(aRecipe.targetValue).toFloat()) {
+              if(aRecipe.id == skipRecipeId){
+                strcpy((*ptrThings)[idx].value, String(abs(String(aRecipe.localValue).toFloat() - 1)).c_str());
+              } else {
+                strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+              }
+              firedRecipeId = aRecipe.id;
+            }
           }
           break;
           case NOT_SMALLER_THAN: {
-              if(String(aRecipe.sourceValue).toFloat() >= String(aRecipe.targetValue).toFloat()) strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+            if(String(aRecipe.sourceValue).toFloat() >= String(aRecipe.targetValue).toFloat()) {
+              if(aRecipe.id == skipRecipeId){
+                strcpy((*ptrThings)[idx].value, String(abs(String(aRecipe.localValue).toFloat() - 1)).c_str());
+              } else {
+                strcpy((*ptrThings)[idx].value, aRecipe.localValue);
+              }
+              firedRecipeId = aRecipe.id;
+            }
           }
           break;
           default :
@@ -296,6 +350,7 @@ void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES
       }
     }
   }
+  if (firedRecipeId != skipRecipeId) skipRecipeId = -1;
 }
 
 void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, char (*rThingValue)[VALUE_SIZE], unsigned long ntp_timer){

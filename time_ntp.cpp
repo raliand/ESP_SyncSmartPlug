@@ -76,6 +76,7 @@ unsigned long getNTPTimestamp()
     ulSecs2000  = highWord << 16 | lowWord;
     ulSecs2000 -= 2208988800UL; // go from 1900 to 1970
     ulSecs2000 -= 946684800UL; // go from 1970 to 2000
+    ulSecs2000 += 7200UL; // +2 hours
   }
   return(ulSecs2000);
 }
