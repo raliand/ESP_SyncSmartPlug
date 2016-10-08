@@ -100,6 +100,7 @@ bool saveToFile(JsonArray& jArr, const char* cFileName);
 bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]);
 bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]);
 bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]);
+bool saveThing(Thing (*ptrThings)[THINGS_LEN], JsonObject& thing, unsigned long ntp_timer);
 bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer);
 void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN]);
 void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, char (*rThingValue)[VALUE_SIZE], unsigned long ntp_timer);

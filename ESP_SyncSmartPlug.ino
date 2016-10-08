@@ -156,21 +156,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
           DBG_OUTPUT_PORT.println(sJson);
           DBG_OUTPUT_PORT.println(system_get_free_heap_size());
         } else if (response["command"].as<String>().compareTo("save_thing") == 0){
-          StaticJsonBuffer<200> jsonBuffer;
-          JsonObject &thing = jsonBuffer.parseObject(response["thing"].as<String>());
-          int index = thing["id"].as<int>() - 1;
-          //aThings[index].name = thing["name"].as<String>().c_str();
-          arrThings[index].type = thing["type"].as<int>();
-          strcpy(arrThings[index].value, thing["value"]);
-          arrThings[index].override = thing["override"].as<bool>();
-          arrThings[index].last_updated = millis()/1000+ntp_timer;
-          bool saved = saveThingsToFile(&arrThings);
+          bool saved = saveThing(&arrThings,response["thing"],ntp_timer);
           DBG_OUTPUT_PORT.println("Updated thing value.");
-          String sJson = "{\"command\":\"response_save_thing\",\"nodeId\":"+String(CHIP_ID)+",\"thingId\":\""+thing["id"].as<int>()+"\",\"success\":"+(saved ? "true" : "false")+"}";
+          String sJson = "{\"command\":\"response_save_thing\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
           webSocket.sendTXT(num, sJson);
           DBG_OUTPUT_PORT.println(system_get_free_heap_size());
         } else if (response["command"].as<String>().compareTo("save_recipe") == 0){
-          bool saved = saveRecipe(&arrRecipes, response["recipe"],ntp_timer);
+          bool saved = saveRecipe(&arrRecipes,response["recipe"],ntp_timer);
           DBG_OUTPUT_PORT.println("Updated recipe value.");
           String sJson = "{\"command\":\"response_save_recipe\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
           webSocket.sendTXT(num, sJson);
@@ -335,15 +327,17 @@ void loop() {
     for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
       const Thing tmpThing = arrThings[idx];
       //if (tmpThing.id == 2 || tmpThing.id == 3){
-        char buffer[JSON_OBJECT_SIZE(10)];
-        StaticJsonBuffer<JSON_OBJECT_SIZE(10)> jsonBuffer;
+        char buffer[JSON_OBJECT_SIZE(12)];
+        StaticJsonBuffer<JSON_OBJECT_SIZE(12)> jsonBuffer;
         JsonObject &msg = jsonBuffer.createObject();
         msg["command"] = "thing_update";
         msg["nodeId"] = String(CHIP_ID);
         msg["nodeName"] = nodeName;
         msg["thingId"] = tmpThing.id;
         msg["thingName"] = tmpThing.name;
-        msg["lastUpdate"] = millis()/1000+ntp_timer;
+        msg["thingType"] = tmpThing.type;
+        msg["override"] = tmpThing.override;
+        msg["lastUpdate"] = tmpThing.last_updated;
         msg["value"] = tmpThing.value;
         msg.printTo(buffer, sizeof(buffer));
         //msg.printTo(DBG_OUTPUT_PORT);

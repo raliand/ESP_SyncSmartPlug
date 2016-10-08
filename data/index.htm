@@ -174,8 +174,8 @@
 			});
 
 			$(document).ready(function() {
-        //startWebsocket(window.location.hostname);
-				startWebsocket("10.0.0.104");
+        startWebsocket(window.location.hostname);
+				//startWebsocket("10.0.0.103");
         for(var i = 0, len = relation.length; i < len; i++){
           //instead of appending each `<option>` element, it is a better practice to either concoct a string of all the HTML or create an array that will later be turned into a string (here we are pushing new indexes onto an `output` array)
           output_rel.push('<option value="' + i +'">' + relation[i] + '</option>');
@@ -213,41 +213,6 @@
                     output_things.push('<option value="' + obj.nodeId+"_"+thing['id'] +'">' + thing['name'] + '</option>');
                     if(thing['type'] == 1) output_switches.push('<option value="' + thing['id'] +'">' + thing['name'] + '</option>');
 									} else things[obj.nodeId+"_"+thing['id']] = thing;
-                  // if($.mobile.activePage.attr('id') == "index"){
-  								// 	switch(thing['id']){
-  								// 		case 1: {//PLUG
-  								// 					window.console.log(thing['name'] + ": " + thing['value']);
-  								// 					if(thing['override'] == 1){
-  								// 						$("#flip-ovrd-sw").val('on').slider('refresh');
-  								// 						//$("#smart-plug-sw").show();
-  								// 					} else {
-  								// 						$("#flip-ovrd-sw").val('off').slider('refresh');
-  								// 						//$("#smart-plug-sw").hide();
-  								// 					}
-  								// 					if(thing['value'] == 1){
-  								// 						$("#flip-plug-sw").val('ON').slider('refresh');
-  								// 					} else {
-  								// 						$("#flip-plug-sw").val('OFF').slider('refresh');
-  								// 					}
-  								// 					$("#plug").text(thing['name'] + ": " + on_off_select[thing['value']]);
-  								// 				}
-  								// 				break;
-  								// 		case 2: {//WATTS
-  								// 					window.console.log(thing['name'] + ": " + thing['value']);
-                  //           //doUpdate(parseFloat(thing['value']));
-          				// 					$("#watts").text(thing['name'] + ": " + thing['value']);
-          				// 					var d = new Date("January 1, 2000 00:00:00");
-          				// 					d.setUTCSeconds(d.getUTCSeconds() + thing['lastUpdate']);
-          				// 					$("#lastupdate-index").html(d.toLocaleString());
-  								// 				}
-  								// 				break;
-  								// 		case 3: {//DAILY-WATTS
-  								// 					window.console.log(thing['name'] + ": " + thing['value']);
-  								// 					$("#daily-kwh").text(thing['name'] + ": " + thing['value']);
-  								// 				}
-  								// 				break;
-  								// 	}
-                  // }
 								});
 							} else if(obj.command == "response_nodes"){
 								$.each(obj.nodes, function(idx, node){
@@ -307,12 +272,23 @@
                   } else recipes[obj.nodeId+"_"+recipe['id']] = recipe;
 								});
 							} else if(obj.command == "thing_update"){
-                window.console.log(evt.data);
+                //window.console.log(obj);
+                things[obj.nodeId+"_"+obj.thingId].name = obj.thingName;
+                things[obj.nodeId+"_"+obj.thingId].type = obj.thingType;
+                things[obj.nodeId+"_"+obj.thingId].override = obj.override;
+                things[obj.nodeId+"_"+obj.thingId].last_updated = obj.lastUpdate;
+                things[obj.nodeId+"_"+obj.thingId].value = obj.value;
                 switch(obj.thingId){
                   case 1: {
-                            $("#plug").text(obj.thingName + " is " + on_off_select[obj.value]);
-                            $("#flip-plug-sw").val(on_off_select[obj.value]).slider('refresh');
-                            $("#flip-ovrd-sw").val(on_off_select[obj.value]).slider('refresh');
+                            $("#plug").text(obj.thingName + " is " + on_off_select[Math.floor(obj.value)]);
+                            if($("#flip-plug-sw").val() != on_off_select[Math.floor(obj.value)]) {
+                              //window.console.log($("#flip-plug-sw").val() + " : " + on_off_select[obj.value]);
+                              $("#flip-plug-sw").val(on_off_select[Math.floor(obj.value)]).slider('refresh');
+                            }
+                            if($("#flip-ovrd-sw").val() != on_off_select[Math.floor(obj.override)]) {
+                              //window.console.log($("#flip-ovrd-sw").val() + " : " + on_off_select[Math.floor(obj.override)]);
+                              $("#flip-ovrd-sw").val(on_off_select[Math.floor(obj.override)]).slider('refresh');
+                            }
                           }
                           break;
                   case 2: {
@@ -488,8 +464,7 @@
 				var pageSelector = urlObj.hash.replace( /\?.*$/, "" );
 				window.console.log(pageSelector);
 				sendCommand(currentWSH, "request_recipes");
-				//showThingPage( nodesKey, pageSelector, urlObj, options );
-        window.console.log(pageSelector);
+				window.console.log(pageSelector);
 				showPage( pageSelector, urlObj, options );
 			}
 
@@ -502,8 +477,7 @@
 			function showIndex( urlObj, options ){
 				var pageSelector = urlObj.hash.replace( /\?.*$/, "" );
 				window.console.log(pageSelector);
-        //doBlankUpdate();
-				showPage( pageSelector, urlObj, options );
+        showPage( pageSelector, urlObj, options );
 			}
 
 			function showPage( pageSelector, urlObj, options ){
@@ -513,46 +487,7 @@
 				$.mobile.changePage( $page, options );
 			}
 
-      $("#flip-ovrd-sw").change(function () {
-      	//window.console.log("here");
-      	sVal = $(this).val();
-      	// if (sVal == 'on') {
-      	// 	$("#smart-plug-sw").show();
-      	// } else {
-      	// 	$("#smart-plug-sw").hide();
-      	// }
-      	if (currentNode != 0) {
-      		var oThing = things[currentNode + '_1'];
-      		oThing.override = (sVal=='on')?true:false;
-      		window.console.log(oThing);
-      		things[currentNode + '_1'] = oThing;
-      		var jObj = {
-      			command : 'save_thing',
-      			thing : oThing
-      		}
-      		//window.console.log(currentWSH);
-      		sendObject(currentWSH, jObj);
-      	}
-      });
 
-      $("#flip-plug-sw").change(function () {
-      	sVal = $(this).val();
-      	if (currentNode != 0) {
-      		var oThing = things[currentNode + '_1'];
-      		oThing.value = (sVal=='ON')?1:0;
-      		window.console.log(oThing);
-      		things[currentNode + '_1'] = oThing;
-          if($("#flip-ovrd-sw").val() != 'on'){
-            sendCommand(currentWSH, 'temp_override');
-          }
-          var jObj = {
-            command : 'save_thing',
-            thing : oThing
-          }
-          sendObject(currentWSH, jObj);
-      		//window.console.log(currentWSH);
-      	}
-      });
 		</script>
     </head>
     <body id="nodeList">
@@ -664,6 +599,41 @@
 		</div>
     </body>
 <script>
+$("#flip-ovrd-sw").change(function () {
+  sVal = $(this).val();
+  if (currentNode != 0) {
+    var oThing = things[currentNode + '_1'];
+    oThing.override = (sVal=='ON')?true:false;
+    //window.console.log("overide switch");
+    things[currentNode + '_1'] = oThing;
+    var jObj = {
+      command : 'save_thing',
+      thing : oThing
+    }
+    //window.console.log(currentWSH);
+    sendObject(currentWSH, jObj);
+  }
+});
+
+$("#flip-plug-sw").change(function () {
+  sVal = $(this).val();
+  if (currentNode != 0) {
+    var oThing = things[currentNode + '_1'];
+    oThing.value = (sVal =='ON')?1:0;
+    //window.console.log("plug switch");
+    things[currentNode + '_1'] = oThing;
+    if($("#flip-ovrd-sw").val() != 'ON'){
+      sendCommand(currentWSH, 'temp_override');
+    }
+    var jObj = {
+      command : 'save_thing',
+      thing : oThing
+    }
+    sendObject(currentWSH, jObj);
+    //window.console.log(currentWSH);
+  }
+});
+
 var storedData = [];
 var n = 120;
 var x = (new Date()).getTime(); // current time

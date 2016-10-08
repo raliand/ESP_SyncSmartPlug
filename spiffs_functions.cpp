@@ -9,7 +9,9 @@ int getFiredRecipeId(){
 }
 
 void setSkipRecipeId(int newSkipRecipeId){
-  skipRecipeId = newSkipRecipeId;
+  if(newSkipRecipeId != skipRecipeId){
+    skipRecipeId = newSkipRecipeId;
+  } else skipRecipeId = -1;  
 }
 
 bool loadFromFileNew(const char* cFileName, char* json, size_t maxSize) {
@@ -125,6 +127,18 @@ bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]) {
   root.printTo(DBG_OUTPUT_PORT);
   return true;
 }
+
+bool saveThing(Thing (*ptrThings)[THINGS_LEN], JsonObject& thing, unsigned long ntp_timer){
+  thing.printTo(DBG_OUTPUT_PORT);
+  int index = thing["id"].as<int>() - 1;
+  (*ptrThings)[index].id = thing["id"].as<int>();
+  thing["value"].as<String>().toCharArray((*ptrThings)[index].value,VALUE_SIZE);
+  (*ptrThings)[index].type = thing["type"].as<int>();
+  (*ptrThings)[index].override = thing["override"].as<bool>();
+  (*ptrThings)[index].last_updated = millis()/1000+ntp_timer;
+  return saveThingsToFile(ptrThings);
+}
+
 
 bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer){
   //StaticJsonBuffer<RECIPE_JSON_SIZE> jsonBuffer;
