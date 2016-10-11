@@ -130,7 +130,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
     break;
     case WStype_TEXT: {
       DBG_OUTPUT_PORT.printf("[%u] get Text: %s\n", num, payload);
-      StaticJsonBuffer<500> jsonCommandBuffer;
+      StaticJsonBuffer<RECIPE_JSON_SIZE*RECIPES_LEN> jsonCommandBuffer;
       JsonObject &response = jsonCommandBuffer.parseObject((char*)payload);
       if (response.success()) {
         if (response["command"].as<String>().compareTo("request_nodes") == 0){
@@ -164,6 +164,12 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         } else if (response["command"].as<String>().compareTo("save_recipe") == 0){
           bool saved = saveRecipe(&arrRecipes,response["recipe"],ntp_timer);
           DBG_OUTPUT_PORT.println("Updated recipe value.");
+          String sJson = "{\"command\":\"response_save_recipe\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
+          webSocket.sendTXT(num, sJson);
+          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+        } else if (response["command"].as<String>().compareTo("save_recipes") == 0){
+          DBG_OUTPUT_PORT.println("Updated recipes.");
+          bool saved = saveRecipes(&arrRecipes,response["recipes"]);
           String sJson = "{\"command\":\"response_save_recipe\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
           webSocket.sendTXT(num, sJson);
           DBG_OUTPUT_PORT.println(system_get_free_heap_size());

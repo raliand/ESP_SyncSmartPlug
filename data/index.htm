@@ -115,12 +115,13 @@
 				$.mobile.loader.prototype.options.html = "<span class='ui-bar ui-overlay-c ui-corner-all'><img src='aloader.gif' /><h2>loading</h2></span>";
 			});
 		</script>
-        <script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/excanvas.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/jquery.jqplot.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/plugins/jqplot.mobile.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/plugins/jqplot.dateAxisRenderer.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/clockpicker/0.0.7/jquery-clockpicker.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/excanvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/jquery.jqplot.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/plugins/jqplot.mobile.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jqPlot/1.0.8/plugins/jqplot.dateAxisRenderer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clockpicker/0.0.7/jquery-clockpicker.min.js"></script>
 		<script type="text/javascript">
 			/* store empty array or array of original data to plot on page load */
 
@@ -175,7 +176,7 @@
 
 			$(document).ready(function() {
         startWebsocket(window.location.hostname);
-				//startWebsocket("10.0.0.103");
+				//startWebsocket("10.0.0.108");
         for(var i = 0, len = relation.length; i < len; i++){
           //instead of appending each `<option>` element, it is a better practice to either concoct a string of all the HTML or create an array that will later be turned into a string (here we are pushing new indexes onto an `output` array)
           output_rel.push('<option value="' + i +'">' + relation[i] + '</option>');
@@ -188,6 +189,14 @@
           //instead of appending each `<option>` element, it is a better practice to either concoct a string of all the HTML or create an array that will later be turned into a string (here we are pushing new indexes onto an `output` array)
           output_on_off_select.push('<option value="' + i +'">' + on_off_select[i] + '</option>');
         }
+
+        $('.sortable-list').sortable({
+          connectWith: '.sortable-list',
+          dropOnEmpty: true,
+          stop: function(event, ui) {
+              window.console.log("New position: " + ui.item.index());
+          }
+        });
       });
 
 			function debug(str) {
@@ -249,10 +258,14 @@
                     var recipe_name = "<input type=\"text\" id=\""+obj.nodeId+"_"+recipe['id']+"_name\" pattern=\"[0-9]*\" value=\""
                                         +recipe['name']+"\"  data-inline=\"true\"/>";
 
-                    var content = "<div data-role='collapsible' id='set" + obj.nodeId+"_"+recipe['id'] + "'><h3>"
+                    // var content = "<div data-role='collapsible' id='set" + obj.nodeId+"_"+recipe['id'] + "'><h3>"
+                    //               + recipe['name'] + "</h3><div class=\"ui-field-contain\" data-type=\"horizontal\">"+recipe_name+"If the " + things_select
+                    //               +"is "+realtion_select+" <div id='"+obj.nodeId+"_"+recipe['id']+"_value_select'></div>then "+on_off_select+" the "
+                    //               +switch_select+"</div></div>";
+                    var content = "<li data-role='collapsible' id='set" + obj.nodeId+"_"+recipe['id'] + "'><h3 class='droppable' >"
                                   + recipe['name'] + "</h3><div class=\"ui-field-contain\" data-type=\"horizontal\">"+recipe_name+"If the " + things_select
                                   +"is "+realtion_select+" <div id='"+obj.nodeId+"_"+recipe['id']+"_value_select'></div>then "+on_off_select+" the "
-                                  +switch_select+"</div></div>";
+                                  +switch_select+"</div></li>";
     						    $("#recipes-set").append( content ).trigger("create");
                     $("#"+obj.nodeId+"_"+recipe['id']+"_thing option[value='"+recipe['sourceNodeId']+"_"+sourceThing.id+"']").attr('selected', 'selected');
                     $('#'+obj.nodeId+"_"+recipe['id']+'_thing').selectmenu('refresh');
@@ -417,8 +430,10 @@
       });
 
       function saveRecipes(){
+        var jRecipes = [];
         $.each(recipes, function(idx, oRecipe){
           var prefix = "#"+currentNode+"_"+oRecipe.id;
+          oRecipe.id = $("#set"+currentNode+"_"+oRecipe.id).index() + 1;
           oRecipe.name = $(prefix+"_name").val();
           oRecipe.sourceNodeId = $(prefix+"_thing").val().split("_")[0];
           oRecipe.sourceThingId = $(prefix+"_thing").val().split("_")[1];
@@ -428,13 +443,16 @@
           if(targetValue.indexOf(":") != -1) targetValue = targetValue.split(":")[0]*3600 + targetValue.split(":")[1]*60;
           oRecipe.targetValue = targetValue;
           oRecipe.localValue = $(prefix+"_on_off").val();
-          var jObj = {
-      			command : 'save_recipe',
-      			recipe : oRecipe
-      		}
-      		sendObject(currentWSH, jObj);
-          window.console.log(oRecipe);
+          oRecipe.last_updated = new Date() - Date.parse("01 01 2000");
+          jRecipes.push(oRecipe);
         });
+        jRecipes.sort(function(a,b) {return (a.id > b.id) ? 1 : ((b.id > a.id) ? -1 : 0);} );
+        var jObj = {
+          command : 'save_recipes',
+          recipes : jRecipes
+        }
+        sendObject(currentWSH, jObj);
+        //window.console.log(jObj);
       }
 
 			function sendCommand(websockethost, command) {
@@ -453,7 +471,7 @@
 			function sendObject(websockethost, sendObj) {
           if(connected[websockethost]) {
   					var jsonStr = JSON.stringify(sendObj);
-  					window.console.log("sending "+jsonStr+" to " + websockethost);
+  					//window.console.log("sending "+jsonStr+" to " + websockethost);
   					webSockets[websockethost].send(jsonStr);
   				} else {
   					setTimeout(function(){sendCommand(websockethost, "request_things")}, 200);
@@ -498,7 +516,7 @@
 						<a href="#" data-rel="close">Close menu</a>
 					</li>
           <li data-filtertext="wai-aria voiceover accessibility screen reader">
-						<a href="#thing_items" >Settings</a>
+						<a href="#thing_items" >Recipes</a>
 					</li>
 					<li data-filtertext="wai-aria voiceover accessibility screen reader">
 						<a href="#nodes">Nodes</a>
@@ -552,7 +570,7 @@
 						<a href="#index" >Main</a>
 					</li>
 					<li data-filtertext="wai-aria voiceover accessibility screen reader">
-						<a href="#thing_items">Settings</a>
+						<a href="#thing_items">Recipes</a>
 					</li>
 				</ul>
 			</div><!-- /panel -->
@@ -584,19 +602,26 @@
 			</div><!-- /panel -->
 			<div data-theme="a" data-role="header" data-position="fixed">
 				<h3>
-					Settings
+					Recipes
 				</h3>
         <a href="#nav-panel-settings" data-icon="bars" data-iconpos="notext">Menu</a>
 			</div>
 			<div data-role="content">
-        <button type="button" data-icon="plus" data-iconpos="right" data-mini="true" data-inline="true" id="recipe_add">Add</button>
-        <button type="button" data-icon="check" data-iconpos="right" data-mini="true" data-inline="true" id="recipe_save">Save</button>
-        <div data-role="collapsibleset" data-content-theme="a" data-iconpos="right" id="recipes-set">
-      </div>
+        <div class="ui-block-a">
+			     <div class="ui-body">
+              <button type="button" data-icon="plus" data-iconpos="right" data-mini="true" data-inline="true" id="recipe_add">Add</button>
+              <button type="button" data-icon="check" data-iconpos="right" data-mini="true" data-inline="true" id="recipe_save">Save</button>
+          </div>
+        </div>
+        <div class="ui-block-a">
+			     <div class="ui-body">
+            <ul data-role="listview" class="sortable-list" id="recipes-set"></ul>
+          </div>
+        </div>
+  		</div>
       <div data-role="footer" id="statusbar" data-position="fixed">
-				<h4>Last Update: <span id="lastupdate-index"></span></h4>
-			</div>
-		</div>
+        <h4> </h4>
+      </div>
     </body>
 <script>
 $("#flip-ovrd-sw").change(function () {

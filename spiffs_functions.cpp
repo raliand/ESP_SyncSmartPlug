@@ -11,7 +11,7 @@ int getFiredRecipeId(){
 void setSkipRecipeId(int newSkipRecipeId){
   if(newSkipRecipeId != skipRecipeId){
     skipRecipeId = newSkipRecipeId;
-  } else skipRecipeId = -1;  
+  } else skipRecipeId = -1;
 }
 
 bool loadFromFileNew(const char* cFileName, char* json, size_t maxSize) {
@@ -45,7 +45,7 @@ bool saveToFile(JsonArray& jArr, const char* cFileName) {
   jArr.printTo(spifsFile);
   //jArr.printTo(DBG_OUTPUT_PORT);
   spifsFile.close();
-  return true;;
+  return true;
 }
 
 bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]) {
@@ -156,6 +156,38 @@ bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned 
   recipe["localValue"].as<String>().toCharArray((*ptrRecipes)[index].localValue,VALUE_SIZE);
   (*ptrRecipes)[index].last_updated = millis()/1000+ntp_timer;
   return saveRecipesToFile(ptrRecipes);
+}
+
+bool saveRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], JsonArray& recipes){
+  File spifsFile = SPIFFS.open("/recipes.json", "w");
+  if (!spifsFile) {
+    DBG_OUTPUT_PORT.println("Failed to open things file for writing");
+    return false;
+  }
+  recipes.printTo(spifsFile);
+  int cuntr = 0;
+  int lastRINDEX = 0;
+  for(JsonArray::iterator it=recipes.begin(); it!=recipes.end(); ++it){
+      JsonObject& jRecipe = it->as<JsonObject&>();
+      if(jRecipe["id"].as<int>() != 0){
+        (*ptrRecipes)[cuntr].id = jRecipe["id"];
+        jRecipe["name"].as<String>().toCharArray((*ptrRecipes)[cuntr].name,50);
+        (*ptrRecipes)[cuntr].sourceNodeId = jRecipe["sourceNodeId"];
+        (*ptrRecipes)[cuntr].sourceThingId = jRecipe["sourceThingId"];
+        jRecipe["sourceValue"].as<String>().toCharArray((*ptrRecipes)[cuntr].sourceValue,VALUE_SIZE);
+        (*ptrRecipes)[cuntr].relation = jRecipe["relation"];
+        (*ptrRecipes)[cuntr].localThingId = jRecipe["localThingId"];
+        jRecipe["targetValue"].as<String>().toCharArray((*ptrRecipes)[cuntr].targetValue,VALUE_SIZE);
+        jRecipe["localValue"].as<String>().toCharArray((*ptrRecipes)[cuntr].localValue,VALUE_SIZE);
+        (*ptrRecipes)[cuntr].last_updated = jRecipe["last_updated"];
+        cuntr++;
+        lastRINDEX++;
+      }
+  }
+  if (recipes.success()){
+    return true;
+  }
+  return false;
 }
 
 void serializeNodes(const Node (*ptrNodes)[NODES_LEN], char* json, size_t maxSize){

@@ -102,6 +102,7 @@ bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]);
 bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]);
 bool saveThing(Thing (*ptrThings)[THINGS_LEN], JsonObject& thing, unsigned long ntp_timer);
 bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer);
+bool saveRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], JsonArray& recipes);
 void processRecipes(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_LEN]);
 void updateRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], long rNodeId, int rThingId, char (*rThingValue)[VALUE_SIZE], unsigned long ntp_timer);
 int getFiredRecipeId();
