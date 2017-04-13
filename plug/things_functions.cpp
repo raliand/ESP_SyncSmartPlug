@@ -18,7 +18,7 @@ long  contadorvisualizacion;
 long  cycleCounter;
 bool  continuar;
 const unsigned long sampleTime = 1000000UL;                           // sample over 100ms, it is an exact number of cycles for both 50Hz and 60Hz mains
-const unsigned long numSamples = 600UL;                               // choose the number of samples to divide sampleTime exactly, but low enough for the ADC to keep up
+const unsigned long numSamples = 250UL;                               // choose the number of samples to divide sampleTime exactly, but low enough for the ADC to keep up
 const unsigned long sampleInterval = sampleTime / numSamples;
 long adc_zero;
 unsigned long currentAcc;
@@ -26,10 +26,60 @@ unsigned int count;
 unsigned long prevMicros;
 long startMicros;
 float dwh = 0;
+
 char sNodes[NODE_JSON_SIZE*NODES_LEN];
 char sThings[THING_JSON_SIZE*THINGS_LEN];
 char sRecipes[RECIPE_JSON_SIZE*RECIPES_LEN];
 // ---------------------------------------
+
+// Auxiliary functions for measuring voltage and current zero point
+int determineVQ(int PIN) {
+  DBG_OUTPUT_PORT.print(F("Estemating voltage zero point: "));
+  long VQ = 0;
+  for (int i = 0; i < 5000; i++) {
+    VQ += analogRead(PIN);
+    delay(1);//depends on sampling (on filter capacitor), can be 1/80000 (80kHz) max.
+  }
+  VQ /= 5000;
+  DBG_OUTPUT_PORT.print(map(VQ, 0, 1023, 0, 5000)); Serial.println(F(" mV"));
+  return int(VQ);
+}
+
+void configModeCallback (WiFiManager *myWiFiManager) {
+  Serial.println("Entered config mode");
+  Serial.println(WiFi.softAPIP());
+  //if you used auto generated SSID, print it
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+}
+
+void init(char nodeName[128]){
+  WiFiManager wifiManager;
+  wifiManager.setAPCallback(configModeCallback);
+  wifiManager.autoConnect();
+
+  String hostname(nodeName);
+  hostname += String(ESP.getChipId(), HEX);
+  WiFi.hostname(hostname);
+
+  int counter = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    counter++;
+  }
+
+
+  // unsigned long ntp_timer = getNTPTimestamp();
+  // ntp_timer -= millis()/1000;
+
+  pinMode(sensorIn, INPUT);
+  pinMode(switchOut, OUTPUT);
+  adc_zero = determineVQ(sensorIn); //Quiscent output voltage - the average voltage ACS712 shows with no load (0 A)
+  startMicros = micros();
+  currentAcc = 0;
+  count = 0;
+  prevMicros = micros() - sampleInterval ;
+}
 
 int initNodes(Node (*ptrNodes)[NODES_LEN],unsigned long ntp_timer){
   IPAddress localIP = WiFi.localIP();
@@ -38,7 +88,9 @@ int initNodes(Node (*ptrNodes)[NODES_LEN],unsigned long ntp_timer){
   display.setBrightness(0x0f);
   if(!loadFromFileNew("/nodes.json",sNodes,NODE_JSON_SIZE*NODES_LEN) || sNodes[0] == '\0') {
     (*ptrNodes)[0].id = CHIP_ID;
-    (*ptrNodes)[0].name = "SmartPlugEsp";
+    String name = "SmartPlugEsp";
+    name.toCharArray((*ptrNodes)[0].name,NAME_SIZE);
+    //strcpy((*ptrNodes)[0].name, "SmartPlugEsp");
     sprintf((*ptrNodes)[0].ip,"%u.%u.%u.%u",localIP[0], localIP[1], localIP[2], localIP[3]);
     saveNodesToFile(ptrNodes);
     serializeNodes(ptrNodes, sNodes, NODE_JSON_SIZE*NODES_LEN);
@@ -56,37 +108,29 @@ int initNodes(Node (*ptrNodes)[NODES_LEN],unsigned long ntp_timer){
 }
 
 void initThings(Thing (*ptrThings)[THINGS_LEN],unsigned long ntp_timer){
-  pinMode(sensorIn, INPUT);
-  pinMode(switchOut, OUTPUT);
-  //digitalWrite(switchOut, HIGH);
-  adc_zero = determineVQ(sensorIn); //Quiscent output voltage - the average voltage ACS712 shows with no load (0 A)
-  startMicros = micros();
-  currentAcc = 0;
-  count = 0;
-  prevMicros = micros() - sampleInterval ;
   sThings[0] = 0;
   delay(500);
   if(!loadFromFileNew("/things.json",sThings,THING_JSON_SIZE*THINGS_LEN) || (sThings[0] == '\0')){
     (*ptrThings)[0].id = 1;
-    (*ptrThings)[0].name = "Plug";
+    String("Plug").toCharArray((*ptrThings)[0].name, NAME_SIZE);
     (*ptrThings)[0].type = SWITCH;
     strcpy((*ptrThings)[0].value, "0");
     (*ptrThings)[0].override = false;
     (*ptrThings)[0].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[1].id = 2;
-    (*ptrThings)[1].name = "Current Wats";
+    String("Current Wats").toCharArray((*ptrThings)[1].name, NAME_SIZE);
     (*ptrThings)[1].type = GENERIC;
     strcpy((*ptrThings)[1].value, "0");
     (*ptrThings)[1].override = false;
     (*ptrThings)[1].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[2].id = 3;
-    (*ptrThings)[2].name = "Daily Wats per Hour";
+    String("Daily Wats per Hour").toCharArray((*ptrThings)[2].name, NAME_SIZE);
     (*ptrThings)[2].type = GENERIC;
     strcpy((*ptrThings)[2].value, "1");
     (*ptrThings)[2].override = false;
     (*ptrThings)[2].last_updated = millis()/1000+ntp_timer;
     (*ptrThings)[3].id = 4;
-    (*ptrThings)[3].name = "Time of day";
+    String("Time of day").toCharArray((*ptrThings)[3].name, NAME_SIZE);
     (*ptrThings)[3].type = CLOCK;
     strcpy((*ptrThings)[3].value, String(seconds_since_midnight(millis()/1000+ntp_timer)).c_str());
     (*ptrThings)[3].override = false;
@@ -107,7 +151,7 @@ void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
   if(!loadFromFileNew("/recipes.json",sRecipes,RECIPE_JSON_SIZE*RECIPES_LEN) || sRecipes[0] == '\0'){
     (*ptrRecipes)[0].id = 1;
     String name = "Max Watts/Hour";
-    name.toCharArray((*ptrRecipes)[0].name,50);
+    name.toCharArray((*ptrRecipes)[0].name,NAME_SIZE);
     (*ptrRecipes)[0].localThingId = 1;
     strcpy((*ptrRecipes)[0].localValue, "0");
     (*ptrRecipes)[0].sourceNodeId = CHIP_ID;
@@ -123,7 +167,6 @@ void initRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], unsigned long ntp_timer){
     delay(100);
     deserializeRecipes(ptrRecipes,sRecipes);
   }
-
   DBG_OUTPUT_PORT.print("sRecipes ");
   DBG_OUTPUT_PORT.println(sRecipes);
 }
@@ -134,13 +177,12 @@ void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_
   digitalWrite(switchOut, String((*ptrThings)[0].value).toFloat());
   strcpy((*ptrThings)[3].value, String(seconds_since_midnight(curr_time)).c_str());
   (*ptrThings)[3].last_updated = curr_time;
-  updateRecipes(ptrRecipes, nodeId, 1, &(*ptrThings)[0].value, curr_time);
-  updateRecipes(ptrRecipes, nodeId, 4, &(*ptrThings)[3].value, curr_time);
+
   if (micros() - startMicros > sampleTime) {// Displays to the serial port the results, after one second
-    sensorValue = analogRead(sensorIn);
+    //sensorValue = analogRead(sensorIn);
     range = (2 + ((maxVoltage - minVoltage) / 5));
-    maxVoltage = sensorValue;
-    minVoltage = sensorValue;
+    maxVoltage = 0; //sensorValue;
+    minVoltage = 1024; //sensorValue;
     float rms = sqrt((float)currentAcc / (float)count) * (83.3333 / 1024.0); //75.7576
     float vrms = rms * 240;
     if (cycleCounter < 48 || cycleCounter > 52 || vrms < 300) vrms = 0;
@@ -152,22 +194,20 @@ void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_
     strcpy((*ptrThings)[2].value, String(dwh).c_str());
     (*ptrThings)[2].last_updated = curr_time;
     updateRecipes(ptrRecipes, nodeId, 3, &(*ptrThings)[2].value, curr_time);
-    //saveThingsToFile(ptrThings);
     cycleCounter = 0;
     startMicros = micros();
     currentAcc = 0;
     count = 0;
     prevMicros = micros() - sampleInterval;
+    updateRecipes(ptrRecipes, nodeId, 1, &(*ptrThings)[0].value, curr_time);
+    updateRecipes(ptrRecipes, nodeId, 4, &(*ptrThings)[3].value, curr_time);
   }
   if (micros() - prevMicros >= sampleInterval){
     sensorValue = analogRead(sensorIn);
-
     long adc_raw = sensorValue - adc_zero;
     currentAcc += (unsigned long)(adc_raw * adc_raw);
     ++count;
     prevMicros += sampleInterval;
-
-
     if (sensorValue >= ( lastValue + range) ) {
       lastValue = sensorValue;
       cycle = 1;
@@ -189,18 +229,12 @@ void processThings(Thing (*ptrThings)[THINGS_LEN], Recipe (*ptrRecipes)[RECIPES_
     if (cycle == 0 && cycleChange == 1) {
       cycleChange = 0;
     }
+  } else {
+    delay(10);
   }
+  //delay(1);
 }
 
-// Auxiliary functions for measuring voltage and current zero point
-int determineVQ(int PIN) {
-  DBG_OUTPUT_PORT.print("Estemating voltage zero point: ");
-  long VQ = 0;
-  for (int i = 0; i < 5000; i++) {
-    VQ += analogRead(PIN);
-    delay(1);//depends on sampling (on filter capacitor), can be 1/80000 (80kHz) max.
-  }
-  VQ /= 5000;
-  DBG_OUTPUT_PORT.print(map(VQ, 0, 1023, 0, 5000)); Serial.println(" mV");
-  return int(VQ);
+void customRequest(const char* command, char* json, size_t maxSize){
+  loadFromFileNew(String("/"+String(command)+".json").c_str(),json,maxSize);
 }

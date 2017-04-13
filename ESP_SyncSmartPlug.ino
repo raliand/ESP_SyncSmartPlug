@@ -1,22 +1,16 @@
 #include <Arduino.h>
 
 #include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
-
-//needed for library
-#include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
-#include <WiFiUDP.h>
+#include "ESPAsyncUDP.h"
 #include <Hash.h>
 #include <WebSocketsServer.h>
 #include <FS.h>
 #include <ArduinoJson.h>
-#include <TM1637Display.h>
-#include <ESP8266SSDP.h>
-#include "WiFiManager.h"          //https://github.com/tzapu/WiFiManager
 #include "time_ntp.h"
 #include "spiffs_functions.h"
-#include "things_functions.h"
+#include "ws\things_functions.h"
+//#include "plug\things_functions.h"
 
 #define CHIP_ID system_get_chip_id()
 #define DBG_OUTPUT_PORT Serial
@@ -33,34 +27,27 @@ char nodeName[128] = "SmartPlugEsp";
 unsigned int localPort = 2390;    // local port to listen for UDP packets
 static bool hasTime = false;
 
-char packetBuffer[UDP_TX_PACKET_MAX_SIZE]; //buffer to hold incoming and outgoing packets
+AsyncUDP aUdp;  // A UDP instance to let us send and receive packets over UDP
 
-WiFiUDP Udp;  // A UDP instance to let us send and receive packets over UDP
-
-unsigned long multicast_timer=millis()+5000;
-unsigned long web_socket_timer=millis()+1000;
+unsigned long multicast_timer=millis()+1000*5;
+unsigned long web_socket_timer=millis()+1000*60*2;
 // ntp timestamp
 unsigned long ntp_timer=0;
 int lastNodeIdx;
-
-void configModeCallback (WiFiManager *myWiFiManager) {
-  Serial.println("Entered config mode");
-  Serial.println(WiFi.softAPIP());
-  Serial.println(myWiFiManager->getConfigPortalSSID());
-}
+int udpCount = 0;
 
 //format bytes
-String formatBytes(size_t bytes){
-  if (bytes < 1024){
-    return String(bytes)+"B";
-  } else if(bytes < (1024 * 1024)){
-    return String(bytes/1024.0)+"KB";
-  } else if(bytes < (1024 * 1024 * 1024)){
-    return String(bytes/1024.0/1024.0)+"MB";
-  } else {
-    return String(bytes/1024.0/1024.0/1024.0)+"GB";
-  }
-}
+// String formatBytes(size_t bytes){
+//   if (bytes < 1024){
+//     return String(bytes)+"B";
+//   } else if(bytes < (1024 * 1024)){
+//     return String(bytes/1024.0)+"KB";
+//   } else if(bytes < (1024 * 1024 * 1024)){
+//     return String(bytes/1024.0/1024.0)+"MB";
+//   } else {
+//     return String(bytes/1024.0/1024.0/1024.0)+"GB";
+//   }
+// }
 
 String getContentType(String filename){
   if(server.hasArg("download")) return "application/octet-stream";
@@ -82,7 +69,7 @@ String getContentType(String filename){
 
 bool handleFileRead(String path){
   DBG_OUTPUT_PORT.println("handleFileRead: " + path);
-  if(path.endsWith("/")) path += "index.htm";
+  if(path.endsWith("/")) path += "index.html";
   String contentType = getContentType(path);
   String pathWithGz = path + ".gz";
   if(SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)){
@@ -99,105 +86,108 @@ bool handleFileRead(String path){
 void multicast_status()
 {
   //DBG_OUTPUT_PORT.println("Multicast Status");
-  String message = String(CHIP_ID) + ":" + String(nodeName);
-  IPAddress ip = WiFi.localIP();
-  ip[3] = 255;
-  for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
-    const Thing tmpThing = arrThings[idx];
-    message += "&";
-    message += tmpThing.id;
-    message += ":" ;
-    message += String(tmpThing.value);
+  if(multicast_timer < millis()){
+    IPAddress ip = WiFi.localIP();
+    ip[3] = 255;
+    String message = String(CHIP_ID) + ":" + String(nodeName);
+
+    for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
+      message += "&";
+      message += arrThings[idx].id;
+      message += ":" ;
+      message += String(arrThings[idx].value);
+    }
+    aUdp.broadcastTo(message.c_str(),1234);
+    multicast_timer = millis()+1000*5;
   }
-  Udp.beginPacket(ip, localPort);
-  Udp.print(message);
-  Udp.endPacket();
-  //  udp.print(message);
-  //  DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+}
+
+void websocket_status(){
+  if(web_socket_timer < millis()){
+    for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
+      const Thing tmpThing = arrThings[idx];
+      char buffer[JSON_OBJECT_SIZE(12)];
+      StaticJsonBuffer<JSON_OBJECT_SIZE(12)> jsonBuffer;
+      JsonObject &msg = jsonBuffer.createObject();
+      msg["command"] = "thing_update";
+      msg["nodeId"] = String(CHIP_ID);
+      msg["nodeName"] = nodeName;
+      msg["thingId"] = tmpThing.id;
+      msg["thingName"] = tmpThing.name;
+      msg["thingType"] = tmpThing.type;
+      msg["override"] = tmpThing.override;
+      msg["lastUpdate"] = tmpThing.last_updated;
+      msg["value"] = tmpThing.value;
+      msg.printTo(buffer, sizeof(buffer));
+      webSocket.broadcastTXT(buffer);
+    }
+    web_socket_timer = millis()+1000*60*2;
+  }
+}
+
+void sendJson(uint8_t num, String command, String resKey, String response){
+  String sJson = "{\"command\":\""+ command +"\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\""+ resKey +"\":"+response+"}";
+  DBG_OUTPUT_PORT.println(sJson);
+  DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+  webSocket.sendTXT(num, sJson);
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
   DBG_OUTPUT_PORT.println(system_get_free_heap_size());
   switch(type) {
     case WStype_DISCONNECTED:
-    DBG_OUTPUT_PORT.printf("[%u] Disconnected!\n", num);
+      DBG_OUTPUT_PORT.printf_P(PSTR("[%u] Disconnected!\n"), num);
     break;
-    case WStype_CONNECTED:
-    {
+    case WStype_CONNECTED: {
       IPAddress ip = webSocket.remoteIP(num);
-      DBG_OUTPUT_PORT.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+      DBG_OUTPUT_PORT.printf_P(PSTR("[%u] Connected from %d.%d.%d.%d url: %s\n"), num, ip[0], ip[1], ip[2], ip[3], payload);
     }
     break;
     case WStype_TEXT: {
-      DBG_OUTPUT_PORT.printf("[%u] get Text: %s\n", num, payload);
+      DBG_OUTPUT_PORT.printf_P(PSTR("[%u] get Text: %s\n"), num, payload);
       StaticJsonBuffer<RECIPE_JSON_SIZE*RECIPES_LEN> jsonCommandBuffer;
       JsonObject &response = jsonCommandBuffer.parseObject((char*)payload);
       if (response.success()) {
-        if (response["command"].as<String>().compareTo("request_nodes") == 0){
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
-          char jNodes[NODE_JSON_SIZE*NODES_LEN];
-          serializeNodes(&arrNodes, jNodes, NODE_JSON_SIZE*NODES_LEN);
-          String sJson = "{\"command\":\"response_nodes\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"nodes\":"+jNodes+"}";
-          webSocket.sendTXT(num, sJson);
-          //DBG_OUTPUT_PORT.println(sJson);
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+        if (response["command"].as<String>().compareTo("request_custom") == 0){
+          char jResponse[MAX_JSON_SIZE];
+          customRequest(response["param"].as<String>().c_str(), jResponse, MAX_JSON_SIZE);
+          sendJson(num, "response_custom", "param\":\""+response["param"].as<String>()+"\",\"response", jResponse);
+        } else if (response["command"].as<String>().compareTo("request_nodes") == 0){
+          char jNodes[MAX_JSON_SIZE];
+          serializeNodes(&arrNodes, jNodes, MAX_JSON_SIZE);
+          sendJson(num, "response_nodes", "nodes", jNodes);
         } else if (response["command"].as<String>().compareTo("request_things") == 0){
-          char jThings[THING_JSON_SIZE*THINGS_LEN];
-          serializeThings(&arrThings, jThings, THING_JSON_SIZE*THINGS_LEN);
-          String sJson = "{\"command\":\"response_things\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"things\":"+jThings+"}";
-          webSocket.sendTXT(num, sJson);
-          DBG_OUTPUT_PORT.println(sJson);
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+          char jThings[MAX_JSON_SIZE];
+          serializeThings(&arrThings, jThings, MAX_JSON_SIZE);
+          sendJson(num, "response_things", "things", jThings);
         } else if (response["command"].as<String>().compareTo("request_recipes") == 0){
-          char jRecipes[RECIPE_JSON_SIZE*RECIPES_LEN];
-          serializeRecipes(&arrRecipes, jRecipes, RECIPE_JSON_SIZE*RECIPES_LEN);
-          String sJson = "{\"command\":\"response_recipes\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"recipes\":"+jRecipes+"}";
-          webSocket.sendTXT(num, sJson);
-          DBG_OUTPUT_PORT.println(sJson);
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+          char jRecipes[MAX_JSON_SIZE];
+          serializeRecipes(&arrRecipes, jRecipes, MAX_JSON_SIZE);
+          sendJson(num, "response_recipes", "recipes", jRecipes);
         } else if (response["command"].as<String>().compareTo("save_thing") == 0){
           bool saved = saveThing(&arrThings,response["thing"],ntp_timer);
-          DBG_OUTPUT_PORT.println("Updated thing value.");
-          String sJson = "{\"command\":\"response_save_thing\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
-          webSocket.sendTXT(num, sJson);
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+          sendJson(num, "response_save_thing", "success", String((saved ? "true" : "false")));
         } else if (response["command"].as<String>().compareTo("save_recipe") == 0){
           bool saved = saveRecipe(&arrRecipes,response["recipe"],ntp_timer);
-          DBG_OUTPUT_PORT.println("Updated recipe value.");
-          String sJson = "{\"command\":\"response_save_recipe\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
-          webSocket.sendTXT(num, sJson);
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+          sendJson(num, "response_save_recipe", "success", String((saved ? "true" : "false")));
         } else if (response["command"].as<String>().compareTo("save_recipes") == 0){
-          DBG_OUTPUT_PORT.println("Updated recipes.");
           bool saved = saveRecipes(&arrRecipes,response["recipes"]);
-          String sJson = "{\"command\":\"response_save_recipe\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"success\":"+(saved ? "true" : "false")+"}";
-          webSocket.sendTXT(num, sJson);
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
+          sendJson(num, "response_save_recipes", "success", String((saved ? "true" : "false")));
         } else if (response["command"].as<String>().compareTo("temp_override") == 0){
           setSkipRecipeId(getFiredRecipeId());
           DBG_OUTPUT_PORT.println("Temp override.");
-          DBG_OUTPUT_PORT.println(system_get_free_heap_size());
         } else {
-          StaticJsonBuffer<200> jsonBuffer;
-          JsonObject &msg = jsonBuffer.createObject();
-          char buffer[200];
-          msg["command"] = "response_default";
-          msg["nodeId"] = CHIP_ID;
-          msg["nodeName"] = nodeName;
-          msg.printTo(buffer, sizeof(buffer));
-          webSocket.sendTXT(num, buffer);
+          String sJson = "{\"command\":\"response_default\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\"}";
+          webSocket.sendTXT(num, sJson);
         }
-        Udp.begin(localPort);
-        //break;
       }
     }
     break;
-    case WStype_BIN:
-    DBG_OUTPUT_PORT.printf("[%u] get binary lenght: %u\n", num, lenght);
-    hexdump(payload, lenght);
-
-    // echo data back to browser
-    webSocket.sendBIN(num, payload, lenght);
+    case WStype_BIN: {
+      DBG_OUTPUT_PORT.printf_P(PSTR("[%u] get binary lenght: %u\n"), num, lenght);
+      hexdump(payload, lenght);
+      webSocket.sendBIN(num, payload, lenght);
+    }
     break;
   }
 }
@@ -207,26 +197,17 @@ void setup() {
   DBG_OUTPUT_PORT.print("\n");
   DBG_OUTPUT_PORT.setDebugOutput(true);
   SPIFFS.begin();
-  Dir dir = SPIFFS.openDir("/");
-  while (dir.next()) {
-    String fileName = dir.fileName();
-    size_t fileSize = dir.fileSize();
-    DBG_OUTPUT_PORT.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
-  }
-  DBG_OUTPUT_PORT.printf("\n");
+  // Dir dir = SPIFFS.openDir("/");
+  // while (dir.next()) {
+  //   String fileName = dir.fileName();
+  //   size_t fileSize = dir.fileSize();
+  //   DBG_OUTPUT_PORT.printf_P(PSTR("FS File: %s, size: %s\n"), fileName.c_str(), formatBytes(fileSize).c_str());
+  // }
+  // DBG_OUTPUT_PORT.printf("\n");
 
-  WiFiManager wifiManager;
-  wifiManager.setAPCallback(configModeCallback);
-  if(!wifiManager.autoConnect()) {
-    Serial.println("failed to connect and hit timeout");
-    //reset and try again, or maybe put it to deep sleep
-    ESP.reset();
-    delay(1000);
-  }
+  init(nodeName);
 
-  //if you get here you have connected to the WiFi
-
-  Serial.println("connected...yeey :)");
+  Serial.println(F("connected...yeey :)"));
   ntp_timer = getNTPTimestamp();
   ntp_timer -= millis()/1000;  // keep distance to millis() counter
 
@@ -236,122 +217,90 @@ void setup() {
   delay(100);
   initRecipes(&arrRecipes, ntp_timer);
 
-  //nodeName = arrNodes[0].name;
   sprintf(nodeName,"%s",arrNodes[0].name);
-  MDNS.begin(nodeName);
-  DBG_OUTPUT_PORT.print("Open http://");
-  DBG_OUTPUT_PORT.print(nodeName);
-  DBG_OUTPUT_PORT.println(".local to see the file browser");
+
+  DBG_OUTPUT_PORT.print(F("Open http://"));
+  DBG_OUTPUT_PORT.print(WiFi.localIP());
+  DBG_OUTPUT_PORT.println(F("/ to see the ESP"));
   server.onNotFound([](){
     if(!handleFileRead(server.uri()))
     server.send(404, "text/plain", "FileNotFound");
   });
-  server.begin();
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-  Udp.begin(localPort);
-  MDNS.addService("http", "tcp", 80);
+  server.begin();
+  //server.serveStatic("/", SPIFFS, "/", "no-cache");
+  Serial.println(F("HTTP server started"));
 
-  Serial.printf("Starting SSDP...\n");
-  SSDP.setSchemaURL("description.xml");
-  SSDP.setHTTPPort(80);
-  SSDP.setName("Philips hue clone");
-  SSDP.setSerialNumber("001788102201");
-  SSDP.setURL("index.htm");
-  SSDP.setModelName("Philips hue bridge 2012");
-  SSDP.setModelNumber("929000226503");
-  SSDP.setModelURL("http://www.meethue.com");
-  SSDP.setManufacturer("Royal Philips Electronics");
-  SSDP.setManufacturerURL("http://www.philips.com");
-  SSDP.begin();
+  if(aUdp.listenMulticast(IPAddress(239,1,2,3), 1234)) {
+    Serial.print("UDP Listening on IP: ");
+    Serial.println(WiFi.localIP());
+    aUdp.onPacket([](AsyncUDPPacket packet) {
+      if(packet.length() > 1){
+        // Serial.print("UDP Packet Type: ");
+        // Serial.print(packet.isBroadcast()?"Broadcast":packet.isMulticast()?"Multicast":"Unicast");
+        // Serial.print(", From: ");
+        // Serial.print(packet.remoteIP());
+        // Serial.print(":");
+        // Serial.print(packet.remotePort());
+        // Serial.print(", To: ");
+        // Serial.print(packet.localIP());
+        // Serial.print(":");
+        // Serial.print(packet.localPort());
+        // Serial.print(", Length: ");
+        // Serial.print(packet.length());
+        // Serial.print(", Data: ");
+        // Serial.write(packet.data(), packet.length());
+        // Serial.println();
 
-
-  DBG_OUTPUT_PORT.println("HTTP server started");
+        char* pPacket = new char[packet.length()+1];
+        pPacket[packet.length()] = '\0';
+        strncpy(pPacket, (char*)packet.data(), packet.length());
+        char* command = strtok(pPacket, "&");
+        if(command != 0){
+          char* separator = strchr(command, ':');
+          if (separator != 0){
+            *separator = 0;
+            String rNodeId = String(command);
+            ++separator;
+            String rNodeName = String(separator);
+            IPAddress remoteIP = packet.remoteIP();
+            int oldIdx = lastNodeIdx;
+            lastNodeIdx = addNode(&arrNodes, rNodeId.toInt(), rNodeName.c_str(), packet.remoteIP().toString().c_str());
+            if(oldIdx != lastNodeIdx) {
+              DBG_OUTPUT_PORT.println(F("sending response_nodes"));
+              char jNodes[MAX_JSON_SIZE];
+              serializeNodes(&arrNodes, jNodes, MAX_JSON_SIZE);
+              String sJson = "{\"command\":\"response_nodes\",\"nodeId\":"+String(CHIP_ID)+",\"nodeName\":\""+nodeName+"\",\"nodes\":"+jNodes+"}";
+              webSocket.broadcastTXT(sJson);
+            }
+            command = strtok(0, "&");
+            while (command != 0){
+              char* separator1 = strchr(command, ':');
+              if (separator != 0){
+                *separator1 = 0;
+                int rThingId = atoi(command);
+                ++separator1;
+                char rThingValue[VALUE_SIZE];
+                strcpy(rThingValue, String(separator1).c_str());
+                updateRecipes(&arrRecipes, atol(rNodeId.c_str()),rThingId,&rThingValue, ntp_timer);
+              }
+              command = strtok(0, "&");
+            }
+          }
+        }
+      }
+    });
+  }
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  server.handleClient();
-  int noBytes = Udp.parsePacket();
-  if ( noBytes ) {
-    DBG_OUTPUT_PORT.print(epoch_to_string(millis()/1000+ntp_timer));
-    DBG_OUTPUT_PORT.print(":Packet of ");
-    DBG_OUTPUT_PORT.print(noBytes);
-    DBG_OUTPUT_PORT.print(" received from ");
-    DBG_OUTPUT_PORT.print(Udp.remoteIP());
-    DBG_OUTPUT_PORT.print(":");
-    DBG_OUTPUT_PORT.println(String(Udp.remotePort()));
-    // We've received a packet, read the data from it
-    Udp.read(packetBuffer,noBytes); // read the packet into the buffer
-    char* command = strtok(packetBuffer, "&");
-    if(command != 0){
-      char* separator = strchr(command, ':');
-      if (separator != 0){
-        // Actually split the string in 2: replace ':' with 0
-        *separator = 0;
-        String rNodeId = String(command);
-        ++separator;
-        String rNodeName = String(separator);
-        arrNodes[lastNodeIdx].id = rNodeId.toInt();
-        arrNodes[lastNodeIdx].name = rNodeName.c_str();
-        //arrNodes[lastNodeIdx].ip = Udp.remoteIP().toString().c_str();
-        IPAddress remoteIP = Udp.remoteIP();
-        sprintf(arrNodes[lastNodeIdx].ip,"%u.%u.%u.%u",remoteIP[0], remoteIP[1], remoteIP[2], remoteIP[3]);
-        //saveNodesToFile(&arrNodes);
-        lastNodeIdx++;
-        DBG_OUTPUT_PORT.println("");
-        command = strtok(0, "&");
-        while (command != 0){
-          char* separator1 = strchr(command, ':');
-          if (separator != 0)
-          {
-            // Actually split the string in 2: replace ':' with 0
-            *separator1 = 0;
-            int rThingId = atoi(command);
-            ++separator1;
-            char rThingValue[VALUE_SIZE];// = String(separator1);
-            strcpy(rThingValue, String(separator1).c_str());
-            updateRecipes(&arrRecipes, atol(rNodeId.c_str()),rThingId,&rThingValue, ntp_timer);
-            saveRecipesToFile(&arrRecipes);
-            // Do something with servoId and position  vb
-          }
-          // Find the next command in input string
-          command = strtok(0, "&");
-        }
-      }
-    }
-  } // end if packet received
   processRecipes(&arrThings,&arrRecipes);
   processThings(&arrThings,&arrRecipes,CHIP_ID, ntp_timer);
-  if(multicast_timer < millis()){
-    multicast_status();
-    multicast_timer = millis()+5000;
-  }
-  if(web_socket_timer < millis()){
-    for( int idx = 0 ; idx < THINGS_LEN ; idx++ ){
-      const Thing tmpThing = arrThings[idx];
-      //if (tmpThing.id == 2 || tmpThing.id == 3){
-        char buffer[JSON_OBJECT_SIZE(12)];
-        StaticJsonBuffer<JSON_OBJECT_SIZE(12)> jsonBuffer;
-        JsonObject &msg = jsonBuffer.createObject();
-        msg["command"] = "thing_update";
-        msg["nodeId"] = String(CHIP_ID);
-        msg["nodeName"] = nodeName;
-        msg["thingId"] = tmpThing.id;
-        msg["thingName"] = tmpThing.name;
-        msg["thingType"] = tmpThing.type;
-        msg["override"] = tmpThing.override;
-        msg["lastUpdate"] = tmpThing.last_updated;
-        msg["value"] = tmpThing.value;
-        msg.printTo(buffer, sizeof(buffer));
-        //msg.printTo(DBG_OUTPUT_PORT);
-        //DBG_OUTPUT_PORT.print("\n");
-        webSocket.broadcastTXT(buffer);
-      //}
-    }
-    web_socket_timer = millis()+1000;
-  }
-  webSocket.loop();
+  multicast_status();
+  websocket_status();
+  server.handleClient();
+  yield();
 }

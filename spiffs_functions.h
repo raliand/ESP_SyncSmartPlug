@@ -38,17 +38,19 @@ code for time conversion based on http://stackoverflow.com/
 
 #define DBG_OUTPUT_PORT Serial
 
-#define RECIPE_JSON_SIZE (JSON_OBJECT_SIZE(11))
-#define THING_JSON_SIZE (JSON_OBJECT_SIZE(7))
-#define NODE_JSON_SIZE (JSON_OBJECT_SIZE(4))
+#define RECIPE_JSON_SIZE (JSON_OBJECT_SIZE(10))
+#define THING_JSON_SIZE (JSON_OBJECT_SIZE(6))
+#define NODE_JSON_SIZE (JSON_OBJECT_SIZE(3))
 #define VALUE_SIZE 8
-#define RECIPES_LEN 10
-#define THINGS_LEN 4
-#define NODES_LEN 20
+#define NAME_SIZE 50
+#define RECIPES_LEN 1
+#define THINGS_LEN 2
+#define NODES_LEN 10
+#define MAX_JSON_SIZE 2000
 
 struct Recipe {
    int id;
-   char name[50];
+   char name[NAME_SIZE];
    int sourceNodeId;
    int sourceThingId;
    char sourceValue[VALUE_SIZE];
@@ -61,7 +63,7 @@ struct Recipe {
 
 struct Thing {
    int id;
-   const char* name;
+   char name[NAME_SIZE];
    int type;
    char value[VALUE_SIZE];
    bool override = false;
@@ -70,7 +72,7 @@ struct Thing {
 
 struct Node {
    long id;
-   const char* name;
+   char name[NAME_SIZE];
    char ip[16];
 };
 
@@ -100,6 +102,7 @@ bool saveToFile(JsonArray& jArr, const char* cFileName);
 bool saveThingsToFile(const Thing (*ptrThings)[THINGS_LEN]);
 bool saveNodesToFile(const Node (*ptrNodes)[NODES_LEN]);
 bool saveRecipesToFile(const Recipe (*ptrRecipes)[RECIPES_LEN]);
+int addNode(Node (*ptrNodes)[NODES_LEN], long rNodeId, const char* rNodeName, const char* rNodeIp);
 bool saveThing(Thing (*ptrThings)[THINGS_LEN], JsonObject& thing, unsigned long ntp_timer);
 bool saveRecipe(Recipe (*ptrRecipes)[RECIPES_LEN], JsonObject& recipe, unsigned long ntp_timer);
 bool saveRecipes(Recipe (*ptrRecipes)[RECIPES_LEN], JsonArray& recipes);

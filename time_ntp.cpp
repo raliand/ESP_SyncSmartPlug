@@ -57,12 +57,12 @@ unsigned long getNTPTimestamp()
   }
   if(!cb)
   {
-    Serial.println("Timeserver not accessible! - No RTC support!");
+    Serial.println(F("Timeserver not accessible! - No RTC support!"));
     ulSecs2000=0;
   }
   else
   {
-    Serial.print("packet received, length=");
+    Serial.print(F("packet received, length="));
     Serial.println(cb);
     udp.read(tPacketBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
 
@@ -85,7 +85,7 @@ unsigned long getNTPTimestamp()
 // send an NTP request to the time server at the given address
 unsigned long sendNTPpacket(IPAddress& address)
 {
-  Serial.println("sending NTP packet...");
+  Serial.println(F("sending NTP packet..."));
   // set all bytes in the buffer to 0
   memset(tPacketBuffer, 0, NTP_PACKET_SIZE);
   // Initialize values needed to form NTP request
